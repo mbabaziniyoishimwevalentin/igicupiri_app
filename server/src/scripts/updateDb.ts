@@ -1,4 +1,4 @@
-import { pool } from '../config/db';
+import { query } from '../config/db';
 
 async function main() {
   try {
