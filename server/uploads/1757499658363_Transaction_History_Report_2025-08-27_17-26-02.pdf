@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Transaction History Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 20px;
+        }
+        
+        .header h1 {
+            margin: 0;
+            color: #333;
+            font-size: 24px;
+        }
+        
+        .header .subtitle {
+            color: #666;
+            margin: 5px 0;
+        }
+        
+        .farmer-info {
+            background-color: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        
+        .report-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+        }
+        
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .summary-card {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+            border: 1px solid #dee2e6;
+        }
+        
+        .summary-card h3 {
+            margin: 0 0 5px 0;
+            font-size: 18px;
+            color: #333;
+        }
+        
+        .summary-card p {
+            margin: 0;
+            color: #666;
+            font-size: 10px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        
+        th, td {
+            border: 1px solid #dee2e6;
+            padding: 8px;
+            text-align: left;
+            font-size: 10px;
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        
+        .status-approved { color: #28a745; font-weight: bold; }
+        .status-pending { color: #ffc107; font-weight: bold; }
+        .status-rejected { color: #dc3545; font-weight: bold; }
+        
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #dee2e6;
+            text-align: center;
+            color: #666;
+            font-size: 10px;
+        }
+        
+        .page-break {
+            page-break-before: always;
+        }
+        
+        @media print {
+            body { margin: 0; }
+            .no-print { display: none; }
+        }
+        
+        .pdf-controls {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border: 1px solid #ddd;
+        }
+        
+        .pdf-controls button {
+            margin: 0 5px;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .btn-download {
+            background-color: #dc3545;
+            color: white;
+        }
+        
+        .btn-print {
+            background-color: #007bff;
+            color: white;
+        }
+        
+        .btn-save {
+            background-color: #28a745;
+            color: white;
+        }
+        
+        .pdf-controls button:hover {
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <!-- PDF Controls (hidden when printing) -->
+    <div class="pdf-controls no-print">
+        <button class="btn-download" onclick="downloadPDF()">📥 Download PDF</button>
+        <button class="btn-print" onclick="printReport()">🖨️ Print</button>
+        <button class="btn-save" onclick="saveAsImage()">💾 Save as Image</button>
+    </div>
+    <!-- Header -->
+    <div class="header">
+        <h1>💳 TRANSACTION HISTORY REPORT</h1>
+        <div class="subtitle">Personal Financial Transaction Summary</div>
+    </div>
+    
+    <!-- Farmer Information -->
+    <div class="farmer-info">
+        <h3>👤 Farmer Details</h3>
+        <p><strong>Name:</strong> teta</p>
+        <p><strong>Email:</strong> teta@gmail.com</p>
+        <p><strong>Phone:</strong> N/A</p>
+                    <p><strong>Location:</strong> kamonyi, ruli</p>
+                    </div>
+    
+    <!-- Report Information -->
+    <div class="report-info">
+        <div>
+            <strong>Report Period:</strong> Aug 01, 2025 - Aug 27, 2025        </div>
+        <div>
+            <strong>Generated On:</strong> Aug 27, 2025 17:26:02        </div>
+        <div>
+            <strong>Generated By:</strong> HingaDatabank Platform
+        </div>
+    </div>
+    
+    <!-- Summary Statistics -->
+    <div class="summary-grid">
+        <div class="summary-card">
+            <h3>7</h3>
+            <p>Total Transactions</p>
+        </div>
+        <div class="summary-card">
+            <h3>RWF 1,500,000</h3>
+            <p>Total Approved</p>
+        </div>
+        <div class="summary-card">
+            <h3>RWF 0</h3>
+            <p>Total Repaid</p>
+        </div>
+        <div class="summary-card">
+            <h3>RWF 3,840,000</h3>
+            <p>Outstanding Balance</p>
+        </div>
+    </div>
+    
+    <!-- Transaction Details Table -->
+    <h3>📊 Detailed Transaction Records</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Transaction ID</th>
+                <th>Institution</th>
+                <th>Loan Type</th>
+                <th>Amount Requested</th>
+                <th>Amount Approved</th>
+                <th>Status</th>
+                <th>Monthly Payment</th>
+                <th>Total Repaid</th>
+                <th>Outstanding</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+                                                <tr>
+                        <td>#0004</td>
+                        <td>King1</td>
+                        <td>Equipment Purchase</td>
+                        <td>RWF 1,500,000</td>
+                        <td>
+                                                            RWF 1,500,000                                                    </td>
+                        <td class="status-approved">
+                            Approved                        </td>
+                        <td>
+                                                            RWF 195,000                                                    </td>
+                        <td>
+                                                            RWF 0                                                    </td>
+                        <td>
+                                                            RWF 3,840,000                                                    </td>
+                        <td>
+                            Jul 09, 2025                        </td>
+                    </tr>
+                                    <tr>
+                        <td>#0003</td>
+                        <td>King1</td>
+                        <td>Equipment Purchase</td>
+                        <td>RWF 700,000</td>
+                        <td>
+                                                            -
+                                                    </td>
+                        <td class="status-pending">
+                            Pending                        </td>
+                        <td>
+                                                            -
+                                                    </td>
+                        <td>
+                                                            -
+                                                    </td>
+                        <td>
+                                                            -
+                                                    </td>
+                        <td>
+                            Pending                        </td>
+                    </tr>
+                                    <tr>
+                        <td>#0002</td>
+                        <td>King1</td>
+                        <td>Crop Production</td>
+                        <td>RWF 600,000</td>
+                        <td>
+                                                            -
+                                                    </td>
+                        <td class="status-pending">
+                            Pending                        </td>
+                        <td>
+                                                            -
+                                                    </td>
+                        <td>
+                                                            -
+                                                    </td>
+                        <td>
+                                                            -
+                                                    </td>
+                        <td>
+                            Pending                        </td>
+                    </tr>
+                                    <tr>
+                        <td>#0001</td>
+                        <td>King1</td>
+                        <td>cee</td>
+                        <td>RWF 1,000,000</td>
+                        <td>
+                                                            -
+                                                    </td>
+                        <td class="status-approved">
+                            Approved                        </td>
+                        <td>
+                                                            -
+                                                    </td>
+                        <td>
+                                                            RWF 0                                                    </td>
+                        <td>
+                                                            -
+                                                    </td>
+                        <td>
+                            Nov 30, -0001                        </td>
+                    </tr>
+                                    </tbody>
+    </table>
+    
+    <!-- Additional Statistics -->
+            <div class="page-break">
+            <h3>📈 Transaction Analysis</h3>
+            
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <h3>5</h3>
+                    <p>Pending Applications</p>
+                </div>
+                <div class="summary-card">
+                    <h3>2</h3>
+                    <p>Approved Loans</p>
+                </div>
+                <div class="summary-card">
+                    <h3>0</h3>
+                    <p>Rejected Applications</p>
+                </div>
+                <div class="summary-card">
+                    <h3>28.6%</h3>
+                    <p>Approval Rate</p>
+                </div>
+            </div>
+            
+            <!-- Loan Type Distribution -->
+                        
+            <h4>📊 Loan Type Distribution</h4>
+            <table style="width: 50%;">
+                <thead>
+                    <tr>
+                        <th>Loan Type</th>
+                        <th>Count</th>
+                        <th>Percentage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                                            <tr>
+                            <td>Equipment Purchase</td>
+                            <td>2</td>
+                            <td>50.0%</td>
+                        </tr>
+                                            <tr>
+                            <td>Crop Production</td>
+                            <td>1</td>
+                            <td>25.0%</td>
+                        </tr>
+                                            <tr>
+                            <td>cee</td>
+                            <td>1</td>
+                            <td>25.0%</td>
+                        </tr>
+                                    </tbody>
+            </table>
+            
+            <!-- Institution Distribution -->
+                        
+            <h4>🏦 Institution Distribution</h4>
+            <table style="width: 50%;">
+                <thead>
+                    <tr>
+                        <th>Institution</th>
+                        <th>Transactions</th>
+                        <th>Percentage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                                            <tr>
+                            <td>King1</td>
+                            <td>4</td>
+                            <td>100.0%</td>
+                        </tr>
+                                    </tbody>
+            </table>
+        </div>
+        
+    <!-- Footer -->
+    <div class="footer">
+        <p><strong>Generated by HingaDatabank Platform</strong></p>
+        <p>Report generated on August 27, 2025 at 17:26:02</p>
+        <p>Prepared by: teta</p>
+        <p style="margin-top: 10px; font-size: 9px; color: #999;">
+            This is a computer-generated report. For any discrepancies, please contact your financial institution.
+        </p>
+    </div>
+
+    <script>
+        function downloadPDF() {
+            // Create a new URL with download parameter
+            const currentUrl = new URL(window.location);
+            currentUrl.searchParams.set('download', '1');
+            
+            // Create a temporary link and trigger download
+            const link = document.createElement('a');
+            link.href = currentUrl.toString();
+            link.download = 'Transaction_History_Report_2025-08-27_17-26-02.pdf';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
+        function printReport() {
+            window.print();
+        }
+        
+        function saveAsImage() {
+            // Use html2canvas library if available, otherwise fallback to print
+            if (typeof html2canvas !== 'undefined') {
+                html2canvas(document.body, {
+                    height: window.innerHeight,
+                    width: window.innerWidth,
+                    useCORS: true,
+                    scale: 2
+                }).then(function(canvas) {
+                    // Create download link for image
+                    const link = document.createElement('a');
+                    link.download = 'Transaction_History_Report_2025-08-27_17-26-02.png';
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                });
+            } else {
+                // Fallback: Load html2canvas from CDN and try again
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                script.onload = function() {
+                    html2canvas(document.body, {
+                        height: window.innerHeight,
+                        width: window.innerWidth,
+                        useCORS: true,
+                        scale: 2
+                    }).then(function(canvas) {
+                        const link = document.createElement('a');
+                        link.download = 'Transaction_History_Report_2025-08-27_17-26-02.png';
+                        link.href = canvas.toDataURL('image/png');
+                        link.click();
+                    });
+                };
+                document.head.appendChild(script);
+            }
+        }
+        
+        // Auto-focus on the page for better printing
+        window.onload = function() {
+            document.body.focus();
+        };
+    </script>
+</body>
+</html>
