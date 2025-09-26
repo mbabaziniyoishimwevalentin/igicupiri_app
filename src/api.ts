@@ -11,7 +11,7 @@ export type UserRole = 'student' | 'lecturer' | 'admin';
 // Set EXPO_PUBLIC_API_URL in your .env or EAS config for production
 const envUrl = (global as any).process?.env?.EXPO_PUBLIC_API_URL as string | undefined;
 // Fallback order: EAS env > LAN IP (for mobile on same WiFi) > localhost (for web dev)
-let BASE_URL = envUrl || 'http://192.168.43.241:4000'; // <-- replace with your real LAN IP for mobile testing
+let BASE_URL = envUrl || 'https://igicupiri-app.onrender.com';
 // For production, set EXPO_PUBLIC_API_URL to your deployed backend URL
 let TOKEN: string | null = null;
 

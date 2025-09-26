@@ -24,6 +24,13 @@ async function startServer() {
   app.use(express.json());
   app.use(morgan('dev'));
 
+  app.get('/', (_req: Request, res: Response) => {
+    res.json({
+      ok: true,
+      service: 'igicupuri-server',
+      endpoints: ['/health','/auth','/papers','/reports','/admin','/lecturer','/student','/settings']
+    });
+  });
   app.get('/health', (_req: Request, res: Response) => res.json({ ok: true }));
   app.use('/auth', authRoutes);
   app.use('/papers', paperRoutes);
