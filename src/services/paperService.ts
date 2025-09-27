@@ -4,6 +4,10 @@ import { FileInfo } from '../components/FileUpload';
 import { authService } from './authService';
 import { api } from '../api';
 
+// Resolve backend base URL similar to api.ts
+const envUrl = (global as any).process?.env?.EXPO_PUBLIC_API_URL as string | undefined;
+const BASE_URL = envUrl || 'https://igicupiri-app.onrender.com';
+
 // Paper types
 export interface Paper {
   id: number;
@@ -158,7 +162,7 @@ class PaperService {
       form.append('file', filePart);
 
       // Use /lecturer/papers endpoint for lecturer uploads
-      const res = await fetch('http://localhost:4000/lecturer/papers', {
+      const res = await fetch(`${BASE_URL}/lecturer/papers`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: form,
@@ -389,7 +393,7 @@ class PaperService {
   // Get file URL for download (server route)
   async getFileUrl(id: number): Promise<string | null> {
     try {
-      return `http://localhost:4000/papers/${id}/download`;
+      return `${BASE_URL}/papers/${id}/download`;
     } catch (error) {
       console.error('Error getting file URL:', error);
       return null;

@@ -39,13 +39,11 @@ function LecturerDashboardScreen(props: LecturerDashboardScreenProps) {
   // Handler: handleDownload (same as admin: /papers/:id/download)
   const handleDownload = async (paperId: number) => {
     try {
-      let url: string;
+      const base = (global as any).process?.env?.EXPO_PUBLIC_API_URL || 'https://igicupiri-app.onrender.com';
+      const url = `${base}/papers/${paperId}/download`;
       if (Platform.OS === 'web') {
-        url = `${window.location.origin}/papers/${paperId}/download`;
         window.open(url, '_blank');
       } else {
-        const base = (global as any).process?.env?.EXPO_PUBLIC_API_URL || 'http://192.168.43.241:4000';
-        url = `${base}/papers/${paperId}/download`;
         Linking.openURL(url);
       }
     } catch (err: any) {
@@ -66,8 +64,8 @@ function LecturerDashboardScreen(props: LecturerDashboardScreenProps) {
     try {
       // Import paperService dynamically to avoid circular deps
       const { paperService } = await import('../services/paperService');
-      if (!user?.id) { Alert.alert('Error', 'User not loaded yet.'); return; }
-      const userId = user.id;
+      if (!authUser?.id) { Alert.alert('Error', 'User not loaded yet.'); return; }
+      const userId = authUser.id;
       // Map category to allowed values
       const allowedCategories = ['exam','assignment','notes','project','other'];
       let category: 'exam'|'assignment'|'notes'|'project'|'other' = 'exam';
@@ -80,7 +78,7 @@ function LecturerDashboardScreen(props: LecturerDashboardScreenProps) {
         category,
         file: selectedFile,
         uploadedBy: userId,
-        uploaderName: user?.fullName || 'Lecturer',
+        uploaderName: authUser?.fullName || 'Lecturer',
         uploaderRole: 'lecturer',
         tags: [],
       });
@@ -152,12 +150,11 @@ function LecturerDashboardScreen(props: LecturerDashboardScreenProps) {
   const [profileSaving, setProfileSaving] = useState(false);
   const [oldPwd, setOldPwd] = useState('');
   const [newPwd, setNewPwd] = useState('');
-  const [user, setUser] = useState<any>(null);
-  const [notifications, setNotifications] = useState<Array<{ id:number; message:string; read:boolean; createdAt:string }>>([]);
+    const [notifications, setNotifications] = useState<Array<{ id:number; message:string; read:boolean; createdAt:string }>>([]);
   // Add any other missing state as needed
 
   // Logout using useAuth (same as admin)
-  const { logout } = useAuth();
+  const { logout, user: authUser } = useAuth();
   function simpleLogout() {
     if (Platform.OS === 'web') {
       try { localStorage.removeItem('auth_token'); } catch {}
@@ -341,143 +338,140 @@ function LecturerDashboardScreen(props: LecturerDashboardScreenProps) {
   // Upload screen removed
 
   function renderPapers() {
+    // Use FlatList as the single scroll container with a header for the upload form.
     return (
-      <View style={styles.content}>
-        <Text style={styles.pageTitle}>Papers ({myPapers.length})</Text>
-        <Text style={styles.pageSubtitle}>
-          Manage your uploaded academic papers
-        </Text>
-        <View style={styles.infoBanner}>
-          <Text style={styles.infoBannerText}>
-            Tip: When uploading, make sure each paper has the correct course, module, year, semester,
-            exam type and department so students can find it easily.
-          </Text>
-        </View>
-        {/* Upload form */}
-        <View style={styles.form}>
-          <Text style={styles.label}>Title</Text>
-          <TextInput style={styles.input} value={uploadForm.title} onChangeText={(v)=>setUploadForm({ ...uploadForm, title: v })} placeholder="e.g., Database Systems 2023 Final" />
-          <Text style={styles.label}>Course</Text>
-          <TextInput style={styles.input} value={uploadForm.course} onChangeText={(v)=>setUploadForm({ ...uploadForm, course: v })} placeholder="e.g., Computer Science" />
-          <Text style={styles.label}>Module Code</Text>
-          <TextInput style={styles.input} value={uploadForm.module} onChangeText={(v)=>setUploadForm({ ...uploadForm, module: v })} placeholder="e.g., DBMS-201" />
-          <Text style={styles.label}>Department</Text>
-          <TextInput style={styles.input} value={uploadForm.department} onChangeText={(v)=>setUploadForm({ ...uploadForm, department: v })} placeholder="e.g., School of Computing" />
-          <Text style={styles.label}>Year</Text>
-          <TextInput style={styles.input} value={uploadForm.year} onChangeText={(v)=>setUploadForm({ ...uploadForm, year: v })} placeholder="e.g., 2023" />
-          <Text style={styles.label}>Semester (1 or 2)</Text>
-          <TextInput style={styles.input} value={uploadForm.semester} onChangeText={(v)=>setUploadForm({ ...uploadForm, semester: v as '1'|'2' })} placeholder="1 or 2" />
-          <Text style={styles.label}>Exam Type (mid/final)</Text>
-          <TextInput style={styles.input} value={uploadForm.examType} onChangeText={(v)=>setUploadForm({ ...uploadForm, examType: v as 'mid'|'final' })} placeholder="mid or final" />
-          <Text style={styles.label}>Category</Text>
-          <TextInput style={styles.input} value={uploadForm.category} onChangeText={(v)=>setUploadForm({ ...uploadForm, category: v as any })} placeholder="exam/assignment/notes/project/other" />
-
-          {/* File picker */}
-          <View style={{ marginTop: 12, marginBottom: 12 }}>
-            {/* Lightweight inline picker via input (web) or keep DocumentPicker in your FileUpload if preferred */}
-            {
-              // For web we can use a native input for binary
-            }
-            <Text style={styles.label}>File</Text>
-              <View style={{ marginTop: 12, marginBottom: 12 }}>
-                {/* File upload: input for web, DocumentPicker for mobile */}
-                {Platform.OS === 'web' ? (
-                  <input
-                    type="file"
-                    accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,image/*"
-                    style={{ marginTop: 10, marginBottom: 10 }}
-                    onChange={async (e: any) => {
-                      const file = e.target.files[0];
-                      if (!file) return;
-                      setSelectedFile({
-                        uri: file.path || file.name,
-                        name: file.name,
-                        type: file.type,
-                        size: file.size,
-                        webFile: file
-                      });
-                    }}
-                  />
-                ) : (
-                  <FileUpload
-                    onFileSelect={setSelectedFile}
-                    acceptedTypes={['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip', 'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'image/*']}
-                    maxSizeInMB={10}
-                  />
-                )}
-              </View>
-          </View>
-
-          <TouchableOpacity style={styles.submitButton} onPress={handleUpload}>
-            <Text style={styles.submitButtonText}>Upload Paper</Text>
-          </TouchableOpacity>
-        </View>
-        
-        <FlatList
-          data={myPapers}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => (
-            <View style={styles.paperListItem}>
-              <View style={styles.paperListHeader}>
-                <View style={styles.paperListInfo}>
-                  <Text style={styles.paperListTitle}>{item.title}</Text>
-                  <Text style={styles.paperListDetails}>
-                    {item.course} <Text accessibilityLabel="dot">•</Text> {item.module}
-                  </Text>
-                  <Text style={styles.paperListMeta}>
-                    {item.year} <Text accessibilityLabel="dot">•</Text> {item.semester} <Text accessibilityLabel="dot">•</Text> {item.category}
-                  </Text>
-                  {!!item.fileSize && (
-                    <Text style={styles.paperListMeta}>
-                      📁 {Math.round(item.fileSize / 1024)}KB
-                    </Text>
-                  )}
-                </View>
-                <View style={[
-                  styles.statusBadge,
-                  { backgroundColor: ((item.status || 'pending') === 'published' || (item.status || 'pending') === 'approved') ? '#4CAF50' : (item.status || 'pending') === 'pending' ? '#FF9800' : '#f44336' }
-                ]}>
-                  <Text style={styles.statusText}>{String(item.status || 'pending').toUpperCase()}</Text>
-                </View>
-              </View>
-              
-              <View style={styles.paperListActionsRight}>
-                <TouchableOpacity 
-                  style={[styles.actionBtn, styles.editBtn]}
-                  onPress={() => { setEditItem(item); setForm({ ...item }); }}
-                >
-                  <Text style={styles.actionBtnText}>✏️ Edit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.actionBtn, styles.deleteBtn]}
-                  onPress={() => deletePaper(item.id)}
-                >
-                  <Text style={[styles.actionBtnText, styles.deleteBtnText]}>🗑️ Delete</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.actionBtn]}
-                  onPress={() => handleDownload(item.id)}
-                >
-                  <Text style={styles.actionBtnText}>📥 Download</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>📚</Text>
-              <Text style={styles.emptyTitle}>No Papers Yet</Text>
-              <Text style={styles.emptyText}>
-                Upload your first academic paper to get started
+      <FlatList
+        data={myPapers}
+        keyExtractor={(item) => item.id.toString()}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: 40 }}
+        ListHeaderComponent={
+          <View>
+            <Text style={styles.pageTitle}>Papers ({myPapers.length})</Text>
+            <Text style={styles.pageSubtitle}>Manage your uploaded academic papers</Text>
+            <View style={styles.infoBanner}>
+              <Text style={styles.infoBannerText}>
+                Tip: When uploading, make sure each paper has the correct course, module, year, semester, exam type and department so students can find it easily.
               </Text>
             </View>
-          }
-        />
-      </View>
+            {/* Upload form */}
+            <View style={[styles.form, { marginBottom: 16 }]}>
+              <Text style={styles.label}>Title</Text>
+              <TextInput style={styles.input} value={uploadForm.title} onChangeText={(v)=>setUploadForm({ ...uploadForm, title: v })} placeholder="e.g., Database Systems 2023 Final" />
+              <Text style={styles.label}>Course</Text>
+              <TextInput style={styles.input} value={uploadForm.course} onChangeText={(v)=>setUploadForm({ ...uploadForm, course: v })} placeholder="e.g., Computer Science" />
+              <Text style={styles.label}>Module Code</Text>
+              <TextInput style={styles.input} value={uploadForm.module} onChangeText={(v)=>setUploadForm({ ...uploadForm, module: v })} placeholder="e.g., DBMS-201" />
+              <Text style={styles.label}>Department</Text>
+              <TextInput style={styles.input} value={uploadForm.department} onChangeText={(v)=>setUploadForm({ ...uploadForm, department: v })} placeholder="e.g., School of Computing" />
+              <Text style={styles.label}>Year</Text>
+              <TextInput style={styles.input} value={uploadForm.year} onChangeText={(v)=>setUploadForm({ ...uploadForm, year: v })} placeholder="e.g., 2023" />
+              <Text style={styles.label}>Semester (1 or 2)</Text>
+              <TextInput style={styles.input} value={uploadForm.semester} onChangeText={(v)=>setUploadForm({ ...uploadForm, semester: v as '1'|'2' })} placeholder="1 or 2" />
+              <Text style={styles.label}>Exam Type (mid/final)</Text>
+              <TextInput style={styles.input} value={uploadForm.examType} onChangeText={(v)=>setUploadForm({ ...uploadForm, examType: v as 'mid'|'final' })} placeholder="mid or final" />
+              <Text style={styles.label}>Category</Text>
+              <TextInput style={styles.input} value={uploadForm.category} onChangeText={(v)=>setUploadForm({ ...uploadForm, category: v as any })} placeholder="exam/assignment/notes/project/other" />
+
+              {/* File picker */}
+              <View style={{ marginTop: 12, marginBottom: 12 }}>
+                {/* Lightweight inline picker via input (web) or keep DocumentPicker in your FileUpload if preferred */}
+                {
+                  // For web we can use a native input for binary
+                }
+                <Text style={styles.label}>File</Text>
+                <View style={{ marginTop: 12, marginBottom: 12 }}>
+                  {/* File upload: input for web, DocumentPicker for mobile */}
+                  {Platform.OS === 'web' ? (
+                    <input
+                      type="file"
+                      accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,image/*"
+                      style={{ marginTop: 10, marginBottom: 10 }}
+                      onChange={async (e: any) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        setSelectedFile({
+                          uri: file.path || file.name,
+                          name: file.name,
+                          type: file.type,
+                          size: file.size,
+                          webFile: file
+                        });
+                      }}
+                    />
+                  ) : (
+                    <FileUpload
+                      onFileSelect={setSelectedFile}
+                      acceptedTypes={['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip', 'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'image/*']}
+                      maxSizeInMB={10}
+                    />
+                  )}
+                </View>
+              </View>
+
+              <TouchableOpacity style={styles.submitButton} onPress={handleUpload}>
+                <Text style={styles.submitButtonText}>Upload Paper</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        }
+        renderItem={({ item }) => (
+          <View style={styles.paperListItem}>
+            <View style={styles.paperListHeader}>
+              <View style={styles.paperListInfo}>
+                <Text style={styles.paperListTitle}>{item.title}</Text>
+                <Text style={styles.paperListDetails}>
+                  {item.course} <Text accessibilityLabel="dot">•</Text> {item.module}
+                </Text>
+                <Text style={styles.paperListMeta}>
+                  {item.year} <Text accessibilityLabel="dot">•</Text> {item.semester} <Text accessibilityLabel="dot">•</Text> {item.category}
+                </Text>
+                {!!item.fileSize && (
+                  <Text style={styles.paperListMeta}>
+                    📁 {Math.round(item.fileSize / 1024)}KB
+                  </Text>
+                )}
+              </View>
+              <View style={[
+                styles.statusBadge,
+                { backgroundColor: ((item.status || 'pending') === 'published' || (item.status || 'pending') === 'approved') ? '#4CAF50' : (item.status || 'pending') === 'pending' ? '#FF9800' : '#f44336' }
+              ]}>
+                <Text style={styles.statusText}>{String(item.status || 'pending').toUpperCase()}</Text>
+              </View>
+            </View>
+            
+            <View style={styles.paperListActionsRight}>
+              <TouchableOpacity 
+                style={[styles.actionBtn, styles.editBtn]}
+                onPress={() => { setEditItem(item); setForm({ ...item }); }}
+              >
+                <Text style={styles.actionBtnText}>✏️ Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.actionBtn, styles.deleteBtn]}
+                onPress={() => deletePaper(item.id)}
+              >
+                <Text style={[styles.actionBtnText, styles.deleteBtnText]}>🗑️ Delete</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.actionBtn]}
+                onPress={() => handleDownload(item.id)}
+              >
+                <Text style={styles.actionBtnText}>📥 Download</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+        showsVerticalScrollIndicator
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyIcon}>📚</Text>
+            <Text style={styles.emptyTitle}>No Papers Yet</Text>
+            <Text style={styles.emptyText}>Upload your first academic paper to get started</Text>
+          </View>
+        }
+      />
     );
   }
 
@@ -546,7 +540,7 @@ function LecturerDashboardScreen(props: LecturerDashboardScreenProps) {
         return;
       }
       // Web: open a print-friendly window; user can Save as PDF
-      const lecturerName = `${user?.fullName || 'Lecturer'}`;
+      const lecturerName = `${authUser?.fullName || 'Lecturer'}`;
       const generatedAt = new Date().toLocaleString();
       const html = `
         <html>
@@ -696,17 +690,17 @@ function LecturerDashboardScreen(props: LecturerDashboardScreenProps) {
         <View style={styles.profileSection}>
           <View style={styles.profileHeader}>
             <View style={styles.profileAvatar}>
-              {user?.avatarUrl ? (
+              {authUser?.avatarUrl ? (
                 Platform.OS === 'web' ? (
                   // Web: native img for crisp rendering
-                  <img src={user.avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', borderRadius: 40, objectFit: 'cover' }} />
+                  <img src={authUser.avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', borderRadius: 40, objectFit: 'cover' }} />
                 ) : (
                   // Native: Image component
                   // @ts-ignore: React Native Image available at runtime
-                  <Image source={{ uri: user.avatarUrl }} style={{ width: 80, height: 80, borderRadius: 40 }} />
+                  <Image source={{ uri: authUser.avatarUrl }} style={{ width: 80, height: 80, borderRadius: 40 }} />
                 )
               ) : (
-                <Text style={styles.profileAvatarText}>{(user?.fullName || 'JS').split(' ').map((n: string) => n[0]).join('')}</Text>
+                <Text style={styles.profileAvatarText}>{(authUser?.fullName || 'JS').split(' ').map((n: string) => n[0]).join('')}</Text>
               )}
             </View>
             <View style={styles.profileInfo}>
@@ -732,7 +726,7 @@ function LecturerDashboardScreen(props: LecturerDashboardScreenProps) {
           </View>
 
           <View style={styles.profileActions}>
-            <TouchableOpacity style={styles.profileButton} onPress={()=>{ setProfileFullName(user?.fullName||''); setProfileDepartment(user?.department||''); setShowEditProfile(true); }}>
+            <TouchableOpacity style={styles.profileButton} onPress={()=>{ setProfileFullName(authUser?.fullName||''); setProfileDepartment(authUser?.department||''); setShowEditProfile(true); }}>
               <Text style={styles.profileButtonText}>Edit Profile</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.profileButton} onPress={()=> setShowChangePassword(true)}>
