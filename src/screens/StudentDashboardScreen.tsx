@@ -1,8 +1,10 @@
 // (Removed stray/duplicate export and code at the top)
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Alert, TextInput, Modal, ScrollView, Platform, Linking, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Alert, TextInput, Modal, ScrollView, Platform, Linking, Share } from 'react-native';
 import { api } from '../api';
 import { useAuth } from '../contexts/AuthContext';
+import { storage } from '../services';
+import { useResponsive } from '../utils/responsive';
 
 interface Paper { 
   id: number; 
@@ -50,7 +52,7 @@ interface SearchFilters {
   category: string;
 }
 
-type SidebarTab = 'dashboard' | 'search' | 'bookmarks' | 'downloads' | 'notifications' | 'profile' | 'help' | 'logout';
+type SidebarTab = 'dashboard' | 'search' | 'bookmarks' | 'downloads' | 'history' | 'study' | 'notifications' | 'profile' | 'help' | 'logout';
 
 export default function StudentDashboardScreen({ navigation }: any) {
   // ...existing useState hooks...
@@ -80,6 +82,13 @@ export default function StudentDashboardScreen({ navigation }: any) {
   const [recentPapers, setRecentPapers] = useState<Paper[]>([]);
   const [bookmarkedPapers, setBookmarkedPapers] = useState<Paper[]>([]);
   const [downloadedPapers, setDownloadedPapers] = useState<Paper[]>([]);
+  const [historyPapers, setHistoryPapers] = useState<Paper[]>([]);
+  const [studyList, setStudyList] = useState<Array<{ id:number; title:string; dueDate:string }>>([]);
+  const [sortOption, setSortOption] = useState<'newest'|'popular'|'size'>('newest');
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [reportingPaper, setReportingPaper] = useState<Paper | null>(null);
+  const [reportReason, setReportReason] = useState('Incorrect metadata');
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [stats, setStats] = useState<StudentStats>({
     totalPapers: 0,
@@ -128,6 +137,7 @@ export default function StudentDashboardScreen({ navigation }: any) {
 
       setRecentPapers(mapped.slice(0, 4));
       setPapers(mapped);
+      setMasterPapers(mapped);
 
       // Default empty placeholders for profile/stats/bookmarks/downloads unless endpoints exist
       setBookmarkedPapers([]);
@@ -188,6 +198,26 @@ export default function StudentDashboardScreen({ navigation }: any) {
 
   useEffect(() => { loadDashboardData(); }, []);
 
+  // Load persisted lists
+  useEffect(() => {
+    (async ()=>{
+      const savedBookmarks = await storage.get<Paper[]>('student_bookmarks', []);
+      const savedDownloads = await storage.get<Paper[]>('student_downloads', []);
+      const savedHistory = await storage.get<Paper[]>('student_history', []);
+      const savedStudy = await storage.get<Array<{id:number; title:string; dueDate:string}>>('student_study', []);
+      setBookmarkedPapers(savedBookmarks);
+      setDownloadedPapers(savedDownloads);
+      setHistoryPapers(savedHistory);
+      setStudyList(savedStudy);
+    })();
+  }, []);
+
+  // Persist lists on change
+  useEffect(() => { storage.set('student_bookmarks', bookmarkedPapers); }, [bookmarkedPapers]);
+  useEffect(() => { storage.set('student_downloads', downloadedPapers); }, [downloadedPapers]);
+  useEffect(() => { storage.set('student_history', historyPapers); }, [historyPapers]);
+  useEffect(() => { storage.set('student_study', studyList); }, [studyList]);
+
   // Poll for new papers every 30 seconds and store notifications
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -227,7 +257,9 @@ export default function StudentDashboardScreen({ navigation }: any) {
 
   async function handleDownload(paper: Paper) {
     try {
-  const url = `http://192.168.43.241:4000/papers/${paper.id}/download`;
+      const { paperService } = await import('../services/paperService');
+      const url = await paperService.getFileUrl(paper.id);
+      if (!url) throw new Error('No file URL');
       if (Platform.OS === 'web') {
         window.open(url, '_blank');
       } else {
@@ -240,6 +272,12 @@ export default function StudentDashboardScreen({ navigation }: any) {
       if (!downloadedPapers.find(p => p.id === paper.id)) {
         setDownloadedPapers(prev => [paper, ...prev]);
       }
+      // Update history
+      setHistoryPapers(prev => {
+        const existing = prev.find(p => p.id === paper.id);
+        const next = existing ? prev.filter(p=>p.id!==paper.id) : prev;
+        return [{ ...paper }, ...next].slice(0, 50);
+      });
     } catch (e:any) {
       Alert.alert('Error', e?.message || 'Failed to download');
     }
@@ -247,13 +285,22 @@ export default function StudentDashboardScreen({ navigation }: any) {
 
   async function openPaper(paper: Paper) {
     try {
-  const url = `http://192.168.43.241:4000/papers/${paper.id}/download`;
+      const { paperService } = await import('../services/paperService');
+      const url = await paperService.getFileUrl(paper.id);
+      if (!url) throw new Error('No file URL');
       if (Platform.OS === 'web') {
-        window.open(url, '_blank');
+        // Inline preview in modal
+        setPreviewUrl(url);
+        setPreviewVisible(true);
       } else {
         const ok = await Linking.canOpenURL(url);
         if (ok) await Linking.openURL(url); else Alert.alert('Error', 'Cannot open file');
       }
+      setHistoryPapers(prev => {
+        const existing = prev.find(p => p.id === paper.id);
+        const next = existing ? prev.filter(p=>p.id!==paper.id) : prev;
+        return [{ ...paper }, ...next].slice(0, 50);
+      });
     } catch (e:any) {
       Alert.alert('Error', e?.message || 'Failed to open');
     }
@@ -296,7 +343,9 @@ export default function StudentDashboardScreen({ navigation }: any) {
       { id: 'search', title: '🔍 Search Papers', icon: '🔍' },
       { id: 'bookmarks', title: '🔖 Bookmarks', icon: '🔖', badge: stats.bookmarksCount },
       { id: 'downloads', title: '📥 Downloads', icon: '📥', badge: stats.downloadsCount },
-  { id: 'notifications', title: '🔔 Notifications', icon: '🔔', badge: notifications.filter(n => !n.read).length },
+      { id: 'history', title: '🕘 History', icon: '🕘' },
+      { id: 'study', title: '📝 Study', icon: '📝' },
+      { id: 'notifications', title: '🔔 Notifications', icon: '🔔', badge: notifications.filter(n => !n.read).length },
       { id: 'profile', title: '👤 Profile', icon: '👤' },
       { id: 'help', title: '❓ Help & Support', icon: '❓' },
       { id: 'logout', title: '🚪 Logout', icon: '🚪' }
@@ -457,8 +506,21 @@ export default function StudentDashboardScreen({ navigation }: any) {
           style={styles.searchInput}
           placeholder="Search by title, course, or module..."
           value={searchQuery}
-          onChangeText={setSearchQuery}
+          onChangeText={(t)=>{ setSearchQuery(t); /* debounced below */ }}
         />
+
+        {/* Sort Options */}
+        <View style={styles.filterRow}>
+          {[
+            { key:'newest', label:'Newest' },
+            { key:'popular', label:'Popular' },
+            { key:'size', label:'File Size' }
+          ].map(opt => (
+            <TouchableOpacity key={opt.key} style={[styles.pickerOptionSmall, sortOption===opt.key && styles.pickerOptionActive]} onPress={()=>setSortOption(opt.key as any)}>
+              <Text style={[styles.pickerTextSmall, sortOption===opt.key && styles.pickerTextActive]}>{opt.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         {/* Filters */}
         <View style={styles.filtersContainer}>
@@ -584,20 +646,49 @@ export default function StudentDashboardScreen({ navigation }: any) {
               </View>
               
               <View style={styles.resultActions}>
-                <TouchableOpacity 
-                  style={styles.downloadBtn}
-                  onPress={() => handleDownload(item)}
-                >
-                  <Text style={styles.downloadBtnText}>📥 Download</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.bookmarkBtnSmall}
-                  onPress={() => toggleBookmark(item)}
-                >
-                  <Text style={styles.bookmarkBtnText}>
-                    {bookmarkedPapers.find(p => p.id === item.id) ? '🔖' : '🔖'}
-                  </Text>
-                </TouchableOpacity>
+              <TouchableOpacity 
+              style={styles.downloadBtn}
+              onPress={() => handleDownload(item)}
+              >
+              <Text style={styles.downloadBtnText}>📥 Download</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+              style={[styles.bookmarkBtnSmall, { backgroundColor:'#6b7280' }]}
+              onPress={() => openPaper(item)}
+              >
+              <Text style={styles.bookmarkBtnText}>👁️ Preview</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+              style={styles.bookmarkBtnSmall}
+              onPress={() => toggleBookmark(item)}
+              >
+              <Text style={styles.bookmarkBtnText}>
+              {bookmarkedPapers.find(p => p.id === item.id) ? '🔖' : '🔖'}
+              </Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+              style={[styles.bookmarkBtnSmall, { backgroundColor:'#2563eb' }]}
+              onPress={async ()=>{
+              try {
+              const { paperService } = await import('../services/paperService');
+              const url = await paperService.getFileUrl(item.id);
+              if (!url) return;
+              if (Platform.OS === 'web') {
+              try { await navigator.clipboard.writeText(url); Alert.alert('Link copied','Paper link copied to clipboard'); } catch { window.open(url,'_blank'); }
+              } else {
+              await Share.share({ message: url });
+              }
+              } catch {}
+              }}
+              >
+              <Text style={styles.bookmarkBtnText}>🔗 Share</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+              style={[styles.bookmarkBtnSmall, { backgroundColor:'#ef4444' }]}
+              onPress={()=> setReportingPaper(item)}
+              >
+              <Text style={styles.bookmarkBtnText}>⚠️ Report</Text>
+              </TouchableOpacity>
               </View>
             </View>
           )}
@@ -704,6 +795,64 @@ export default function StudentDashboardScreen({ navigation }: any) {
               <Text style={styles.emptyStateSubtext}>Download papers to access them offline</Text>
             </View>
           }
+        />
+      </View>
+    );
+  }
+
+  function renderHistory() {
+    return (
+      <View style={styles.content}>
+        <Text style={styles.pageTitle}>History ({historyPapers.length})</Text>
+        <Text style={styles.pageSubtitle}>Recently opened or downloaded</Text>
+        <FlatList
+          data={historyPapers}
+          keyExtractor={(item)=> item.id.toString()}
+          renderItem={({item}) => (
+            <View style={styles.searchResultCard}>
+              <Text style={styles.resultTitle}>{item.title}</Text>
+              <Text style={styles.resultDetails}>{item.course} • {item.module}</Text>
+              <View style={styles.resultActions}>
+                <TouchableOpacity style={styles.openBtn} onPress={()=>openPaper(item)}>
+                  <Text style={styles.openBtnText}>Open</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.redownloadBtn} onPress={()=>handleDownload(item)}>
+                  <Text style={styles.redownloadBtnText}>Download</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        />
+      </View>
+    );
+  }
+
+  function renderStudy() {
+    return (
+      <View style={styles.content}>
+        <Text style={styles.pageTitle}>Study List ({studyList.length})</Text>
+        <Text style={styles.pageSubtitle}>Lightweight planner with due dates</Text>
+        <FlatList
+          data={studyList}
+          keyExtractor={(it)=> String(it.id)}
+          ListEmptyComponent={<Text style={{ color:'#64748b' }}>No study items yet. Add from search or history.</Text>}
+          renderItem={({item}) => (
+            <View style={styles.downloadCard}>
+              <Text style={styles.downloadTitle}>{item.title}</Text>
+              <Text style={styles.downloadMeta}>Due: {new Date(item.dueDate).toLocaleDateString()}</Text>
+              <View style={styles.downloadActions}>
+                <TouchableOpacity style={styles.openBtn} onPress={()=>{
+                  const paper = papers.find(p=>p.id===item.id) || historyPapers.find(p=>p.id===item.id);
+                  if (paper) openPaper(paper);
+                }}>
+                  <Text style={styles.openBtnText}>Open</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.removeBookmarkBtn} onPress={()=> setStudyList(prev => prev.filter(x=>x.id!==item.id))}>
+                  <Text style={styles.removeBookmarkBtnText}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         />
       </View>
     );
@@ -857,6 +1006,8 @@ export default function StudentDashboardScreen({ navigation }: any) {
       case 'search': return renderSearch();
       case 'bookmarks': return renderBookmarks();
       case 'downloads': return renderDownloads();
+      case 'history': return renderHistory();
+      case 'study': return renderStudy();
       case 'profile': return renderProfile();
       case 'help': return renderHelp();
       case 'notifications': return renderNotifications();
@@ -864,8 +1015,7 @@ export default function StudentDashboardScreen({ navigation }: any) {
     }
   }
 
-  const { width } = useWindowDimensions();
-  const isMobile = width < 768;
+  const { isMobile } = useResponsive();
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -911,6 +1061,43 @@ export default function StudentDashboardScreen({ navigation }: any) {
           {renderContent()}
         </View>
       </View>
+      {/* Preview Modal (Web) */}
+      <Modal visible={previewVisible} animationType="fade" transparent={true} onRequestClose={()=>setPreviewVisible(false)}>
+        <View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.6)', justifyContent:'center', alignItems:'center', padding:20 }}>
+          <View style={{ backgroundColor:'#fff', width:'100%', maxWidth:900, height:'80%', borderRadius:12, overflow:'hidden' }}>
+            <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', padding:10, backgroundColor:'#f1f5f9' }}>
+              <Text style={{ fontWeight:'700', color:'#1f2937' }}>Preview</Text>
+              <TouchableOpacity onPress={()=>setPreviewVisible(false)}><Text style={{ fontSize:20 }}>✕</Text></TouchableOpacity>
+            </View>
+            {Platform.OS === 'web' && previewUrl && (
+              // @ts-ignore - iframe is web-only
+              <iframe src={previewUrl} style={{ width:'100%', height:'100%', border:0 }} />
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Report Modal */}
+      <Modal visible={!!reportingPaper} animationType="fade" transparent onRequestClose={()=>setReportingPaper(null)}>
+        <View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'center', alignItems:'center', padding:20 }}>
+          <View style={{ backgroundColor:'#fff', borderRadius:12, padding:16, width:'100%', maxWidth:420 }}>
+            <Text style={{ fontSize:18, fontWeight:'700', marginBottom:8 }}>Report a Problem</Text>
+            <Text style={{ color:'#64748b', marginBottom:8 }}>{reportingPaper?.title}</Text>
+            <TextInput style={styles.filterInput} placeholder="Reason (e.g., wrong file, corrupt PDF)" value={reportReason} onChangeText={setReportReason} />
+            <View style={{ flexDirection:'row', gap:8, marginTop:10 }}>
+              <TouchableOpacity style={styles.clearButton} onPress={()=> setReportingPaper(null)}>
+                <Text style={styles.clearButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.searchButton} onPress={async()=>{
+                if (!reportingPaper) return; 
+                try { await api.reports.create(reportingPaper.id, reportReason || 'Issue'); Alert.alert('Submitted','Thank you for your report'); setReportingPaper(null); setReportReason('Incorrect metadata'); } catch(e:any){ Alert.alert('Error', e?.message||'Failed to submit'); }
+              }}>
+                <Text style={styles.searchButtonText}>Submit</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
