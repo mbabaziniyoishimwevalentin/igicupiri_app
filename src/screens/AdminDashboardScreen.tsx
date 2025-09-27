@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Alert, TextInput, Modal, ScrollView, Platform, Linking, RefreshControl, ActivityIndicator, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Alert, TextInput, Modal, ScrollView, Platform, Linking, RefreshControl, ActivityIndicator, KeyboardAvoidingView } from 'react-native';
 import { api } from '../api';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { userService } from '../services/userService';
 import { useAuth } from '../contexts/AuthContext';
+import { useResponsive } from '../utils/responsive';
 
 interface Paper { 
   id: number; 
@@ -1156,13 +1157,13 @@ export default function AdminDashboardScreen({ navigation }: any) {
     }
   }
 
-  const { width } = useWindowDimensions();
-  const isMobile = width < 768;
+  const { isMobile } = useResponsive();
 
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={isMobile ? 64 : 0} style={{ flex: 1 }}>
       {isMobile && (
         <View style={styles.mobileHeader}>
           <TouchableOpacity style={styles.menuButton} onPress={() => setMenuOpen(true)}>
@@ -1307,6 +1308,7 @@ export default function AdminDashboardScreen({ navigation }: any) {
           </View>
         </View>
       </Modal>
+    </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
