@@ -838,62 +838,75 @@ export default function AdminDashboardScreen({ navigation }: any) {
   }
 
   function renderUsers() {
+    const filteredUsers = users
+      .filter((u: any) => u && typeof u.id === 'number')
+      .filter((u: any) => {
+        const q = userSearch.trim().toLowerCase();
+        if (!q) return true;
+        return String(u.fullName || '').toLowerCase().includes(q) || String(u.email || '').toLowerCase().includes(q);
+      });
+
     return (
-      <View style={styles.content}>
-        <Text style={styles.pageTitle}>User Management ({users.length})</Text>
-        <Text style={styles.pageSubtitle}>Manage system users and their permissions</Text>
-        <View style={styles.form}>
-          <Text style={styles.settingLabel}>Add New User</Text>
-          <TextInput style={styles.input} placeholder="Full name" value={newUser.fullName} onChangeText={(v)=>setNewUser({ ...newUser, fullName: v })} />
-          <TextInput style={styles.input} placeholder="Email" value={newUser.email} onChangeText={(v)=>setNewUser({ ...newUser, email: v })} />
-          <TextInput style={styles.input} placeholder="Password" value={newUser.password} onChangeText={(v)=>setNewUser({ ...newUser, password: v })} />
-          <TextInput style={styles.input} placeholder="Role (student/lecturer/admin)" value={newUser.role} onChangeText={(v)=>setNewUser({ ...newUser, role: (v as any) })} />
-          <TouchableOpacity style={styles.submitButton} onPress={async ()=>{
-            try{
-              const payload:any = { fullName: newUser.fullName.trim(), email: newUser.email.trim(), password: newUser.password, role: newUser.role||'student', studentId: newUser.studentId||null };
-              if(!payload.fullName||!payload.email||!payload.password){ Alert.alert('Error','Name, email and password are required'); return; }
-              const created = await userService.createUser(payload);
-              setUsers(prev=>[created as any, ...prev]);
-              setNewUser({ fullName:'', email:'', password:'', role:'student', studentId:'' });
-              Alert.alert('Success','User created');
-            }catch(e:any){ Alert.alert('Error', e?.message||'Failed to create user'); }
-          }}>
-            <Text style={styles.submitButtonText}>Create User</Text>
-          </TouchableOpacity>
-        </View>
-        
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search users by name or email..."
-          value={userSearch}
-          onChangeText={setUserSearch}
-        />
-        <View style={{ backgroundColor:'#fff', borderRadius:8, borderWidth:1, borderColor:'#ecf0f1' }}>
-          <View style={{ flexDirection:'row', padding:10, borderBottomWidth:1, borderColor:'#eee', backgroundColor:'#f8fafc' }}>
-            <Text style={{ flex:0.5, fontWeight:'700', color:'#334155' }}>ID</Text>
-            <Text style={{ flex:1.5, fontWeight:'700', color:'#334155' }}>Name</Text>
-            <Text style={{ flex:2, fontWeight:'700', color:'#334155' }}>Email</Text>
-            <Text style={{ flex:1, fontWeight:'700', color:'#334155' }}>Role</Text>
-            <Text style={{ flex:1, fontWeight:'700', color:'#334155' }}>Student ID</Text>
-            <Text style={{ flex:1.2, fontWeight:'700', color:'#334155' }}>Created</Text>
-            <Text style={{ flex:1, fontWeight:'700', color:'#334155' }}>Actions</Text>
+      <FlatList
+        data={filteredUsers}
+        keyExtractor={(item: any) => String(item.id)}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async()=>{ setRefreshing(true); await loadData(); setRefreshing(false); }} />}
+        ListHeaderComponent={
+          <View>
+            <Text style={styles.pageTitle}>User Management ({users.length})</Text>
+            <Text style={styles.pageSubtitle}>Manage system users and their permissions</Text>
+            <View style={styles.form}>
+              <Text style={styles.settingLabel}>Add New User</Text>
+              <TextInput style={styles.input} placeholder="Full name" value={newUser.fullName} onChangeText={(v)=>setNewUser({ ...newUser, fullName: v })} />
+              <TextInput style={styles.input} placeholder="Email" autoCapitalize="none" keyboardType="email-address" value={newUser.email} onChangeText={(v)=>setNewUser({ ...newUser, email: v })} />
+              <TextInput style={styles.input} placeholder="Password" secureTextEntry value={newUser.password} onChangeText={(v)=>setNewUser({ ...newUser, password: v })} />
+              <TextInput style={styles.input} placeholder="Role (student/lecturer/admin)" value={newUser.role} onChangeText={(v)=>setNewUser({ ...newUser, role: (v as any) })} />
+              <TouchableOpacity style={styles.submitButton} onPress={async ()=>{
+                try{
+                  const payload:any = { fullName: newUser.fullName.trim(), email: newUser.email.trim(), password: newUser.password, role: newUser.role||'student', studentId: newUser.studentId||null };
+                  if(!payload.fullName||!payload.email||!payload.password){ Alert.alert('Error','Name, email and password are required'); return; }
+                  const created = await userService.createUser(payload);
+                  setUsers(prev=>[created as any, ...prev]);
+                  setNewUser({ fullName:'', email:'', password:'', role:'student', studentId:'' });
+                  Alert.alert('Success','User created');
+                }catch(e:any){ Alert.alert('Error', e?.message||'Failed to create user'); }
+              }}>
+                <Text style={styles.submitButtonText}>Create User</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search users by name or email..."
+              value={userSearch}
+              onChangeText={setUserSearch}
+            />
+
+            {/* Desktop header row */}
+            {!isMobile && (
+              <View style={{ backgroundColor:'#fff', borderRadius:8, borderWidth:1, borderColor:'#ecf0f1' }}>
+                <View style={{ flexDirection:'row', padding:10, borderBottomWidth:1, borderColor:'#eee', backgroundColor:'#f8fafc' }}>
+                  <Text style={{ flex:0.5, fontWeight:'700', color:'#334155' }}>ID</Text>
+                  <Text style={{ flex:1.5, fontWeight:'700', color:'#334155' }}>Name</Text>
+                  <Text style={{ flex:2, fontWeight:'700', color:'#334155' }}>Email</Text>
+                  <Text style={{ flex:1, fontWeight:'700', color:'#334155' }}>Role</Text>
+                  <Text style={{ flex:1, fontWeight:'700', color:'#334155' }}>Student ID</Text>
+                  <Text style={{ flex:1.2, fontWeight:'700', color:'#334155' }}>Created</Text>
+                  <Text style={{ flex:1, fontWeight:'700', color:'#334155' }}>Actions</Text>
+                </View>
+              </View>
+            )}
           </View>
-          {users
-            .filter((u:any)=>u && typeof u.id === 'number')
-            .filter((u:any)=>{
-              const q = userSearch.trim().toLowerCase();
-              if(!q) return true;
-              return String(u.fullName||'').toLowerCase().includes(q) || String(u.email||'').toLowerCase().includes(q);
-            })
-            .map((item:any)=> (
-            <View key={item.id} style={{ flexDirection:'row', padding:10, borderTopWidth:1, borderColor:'#f1f5f9', alignItems:'center' }}>
-              <Text style={{ flex:0.5, color:'#334155' }}>{item.id}</Text>
-              <Text style={{ flex:1.5, color:'#334155' }}>{item.fullName||'Unknown'}</Text>
-              <Text style={{ flex:2, color:'#334155' }}>{item.email||''}</Text>
-              <Text style={{ flex:1, color:'#334155' }}>{item.role}</Text>
-              <Text style={{ flex:1, color:'#334155' }}>{item.studentId||''}</Text>
-              <Text style={{ flex:1.2, color:'#334155' }}>{item.createdAt ? new Date(String(item.createdAt)).toLocaleDateString() : ''}</Text>
-              <View style={{ flex:1, flexDirection:'row', gap:8, justifyContent:'flex-end' }}>
+        }
+        renderItem={({ item }: any) => (
+          isMobile ? (
+            <View style={styles.userCard}>
+              <Text style={{ fontWeight:'700', color:'#1f2937', marginBottom:4 }}>{item.fullName || 'Unknown'}</Text>
+              <Text style={{ color:'#334155' }}>Email: {item.email}</Text>
+              <Text style={{ color:'#334155' }}>Role: {item.role}</Text>
+              {!!item.studentId && <Text style={{ color:'#334155' }}>Student ID: {item.studentId}</Text>}
+              <Text style={{ color:'#6b7280', fontSize:12, marginTop:6 }}>Created: {item.createdAt ? new Date(String(item.createdAt)).toLocaleDateString() : ''}</Text>
+              <View style={{ flexDirection:'row', gap:8, marginTop:10, justifyContent:'flex-end' }}>
                 <TouchableOpacity 
                   style={[styles.smallBtn, { backgroundColor:'#2563eb' }]}
                   onPress={()=>{ setEditUser(item); setUserForm({ fullName:item.fullName, email:item.email, role:item.role, studentId:item.studentId }); }}
@@ -911,9 +924,46 @@ export default function AdminDashboardScreen({ navigation }: any) {
                 </TouchableOpacity>
               </View>
             </View>
-          ))}
-        </View>
-      </View>
+          ) : (
+            <View style={{ backgroundColor:'#fff', borderLeftWidth:1, borderRightWidth:1, borderColor:'#ecf0f1' }}>
+              <View style={{ flexDirection:'row', padding:10, borderTopWidth:1, borderColor:'#f1f5f9', alignItems:'center' }}>
+                <Text style={{ flex:0.5, color:'#334155' }}>{item.id}</Text>
+                <Text style={{ flex:1.5, color:'#334155' }}>{item.fullName||'Unknown'}</Text>
+                <Text style={{ flex:2, color:'#334155' }}>{item.email||''}</Text>
+                <Text style={{ flex:1, color:'#334155' }}>{item.role}</Text>
+                <Text style={{ flex:1, color:'#334155' }}>{item.studentId||''}</Text>
+                <Text style={{ flex:1.2, color:'#334155' }}>{item.createdAt ? new Date(String(item.createdAt)).toLocaleDateString() : ''}</Text>
+                <View style={{ flex:1, flexDirection:'row', gap:8, justifyContent:'flex-end' }}>
+                  <TouchableOpacity 
+                    style={[styles.smallBtn, { backgroundColor:'#2563eb' }]}
+                    onPress={()=>{ setEditUser(item); setUserForm({ fullName:item.fullName, email:item.email, role:item.role, studentId:item.studentId }); }}
+                  >
+                    <Text style={styles.smallBtnText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.smallBtn, { backgroundColor:'#e11d48' }]}
+                    onPress={async ()=>{
+                      try{ await userService.permanentlyDeleteUser(item.id); setUsers(prev=> prev.filter(u=>u.id!==item.id)); Alert.alert('Deleted','User removed'); }
+                      catch(e:any){ Alert.alert('Error', e?.message||'Failed to delete'); }
+                    }}
+                  >
+                    <Text style={styles.smallBtnText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )
+        )}
+        ListEmptyComponent={
+          <View style={{ alignItems:'center', padding:24 }}>
+            <Text style={{ fontSize:40, marginBottom:8 }}>👥</Text>
+            <Text style={{ color:'#7f8c8d', fontWeight:'600' }}>No users yet</Text>
+            <Text style={{ color:'#95a5a6' }}>Create the first user using the form above</Text>
+          </View>
+        }
+        contentContainerStyle={{ paddingBottom: 40 }}
+        showsVerticalScrollIndicator
+      />
     );
   }
 
