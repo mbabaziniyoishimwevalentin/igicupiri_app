@@ -40,7 +40,7 @@ export interface UserStats {
 
 // Align base URL resolution with src/api.ts so it works on mobile (LAN IP or EXPO_PUBLIC_API_URL)
 const envUrl = (global as any).process?.env?.EXPO_PUBLIC_API_URL as string | undefined;
-const BASE_URL = envUrl || 'http://192.168.43.241:4000';
+const BASE_URL = envUrl || 'https://igicupiri-app.onrender.com';
 
 async function getAuthToken(): Promise<string | null> {
   try {
