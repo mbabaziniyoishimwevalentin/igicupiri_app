@@ -236,22 +236,40 @@ class AuthService {
         role: data.role === 'admin' ? 'student' : data.role // server allows student|lecturer
       } as const;
 
-      const { token, user } = await api.auth.register(
+      // Server may return either { token, user } on immediate activation
+      // OR { ok: true, message } when registration is pending approval.
+      const result = await api.auth.register(
         payload.fullName, payload.studentId, payload.email, payload.password, payload.role
       );
 
-      const authUser: AuthUser = {
-        id: user.id,
-        fullName: payload.fullName,
-        email: payload.email,
-        role: user.role,
-        status: 'active',
-        createdAt: new Date().toISOString(),
-      };
+      const token = (result as any)?.token;
+      const user = (result as any)?.user as { id: number; role: AuthUser['role'] } | undefined;
+      const ok = (result as any)?.ok as boolean | undefined;
+      const message = (result as any)?.message as string | undefined;
 
-      await this.storeAuthData(authUser, token);
-      console.log('✅ Registration successful for:', authUser.fullName);
-      return { success: true, message: 'Registration successful', user: authUser, token };
+      if (token && user) {
+        const authUser: AuthUser = {
+          id: user.id,
+          fullName: payload.fullName,
+          email: payload.email,
+          role: user.role,
+          status: 'active',
+          createdAt: new Date().toISOString(),
+        };
+
+        await this.storeAuthData(authUser, token);
+        console.log('✅ Registration successful for:', authUser.fullName);
+        return { success: true, message: 'Registration successful', user: authUser, token };
+      }
+
+      // Handle pending approval flow (no token/user provided)
+      if (ok) {
+        console.log('ℹ️ Registration submitted for approval:', payload.email);
+        return { success: true, message: message || 'Registration submitted. Awaiting admin approval.' };
+      }
+
+      // Fallback if response structure is unexpected
+      return { success: false, message: 'Registration failed' };
     } catch (error: any) {
       console.error('Registration error:', error);
       return { success: false, message: error.message || 'Registration failed' };
