@@ -15,22 +15,26 @@ const registerSchema = z.object({
   role: z.enum(['student','lecturer']).default('student')
 });
 
+// New: registration now creates a pending request, not an active user
 router.post('/register', async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { fullName, studentId, email, password, role } = parsed.data;
   try {
-    const existing = await query('SELECT id FROM users WHERE email=$1', [email]);
-    if (existing.rows.length) return res.status(409).json({ error: 'Email already in use' });
+    // Prevent duplicate email between active users and pending requests
+    const existingUser = await query('SELECT id FROM users WHERE email=$1', [email]);
+    if (existingUser.rows.length) return res.status(409).json({ error: 'Email already in use' });
+    const existingReq = await query('SELECT id FROM registration_requests WHERE email=$1 AND status="pending"', [email]);
+    if (existingReq.rows.length) return res.status(409).json({ error: 'Registration already pending approval' });
+
     const password_hash = await bcrypt.hash(password, 10);
-    const result = await query<{ id: number }>(
-      `INSERT INTO users(full_name,email,password_hash,role,student_id)
-       VALUES($1,$2,$3,$4,$5) RETURNING id`,
-      [fullName, email, password_hash, role, studentId || null]
+    await query(
+      `INSERT INTO registration_requests(full_name,email,password_hash,role,student_id,status)
+       VALUES($1,$2,$3,$4,$5,'pending')`,
+      [fullName, email, password_hash, role, studentId || null] 
     );
-    const user = { id: result.rows[0].id, role } as const;
-    const token = jwt.sign(user, ENV.JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user });
+
+    res.json({ ok: true, message: 'Registration submitted. Awaiting admin approval.' });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });

@@ -81,3 +81,21 @@ CREATE TABLE IF NOT EXISTS notifications (
   read INTEGER NOT NULL DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Registration requests (pending approvals for new accounts)
+CREATE TABLE IF NOT EXISTS registration_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  full_name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('student','lecturer')) DEFAULT 'student',
+  student_id TEXT,
+  status TEXT NOT NULL CHECK (status IN ('pending','approved','rejected')) DEFAULT 'pending',
+  reason TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  processed_at DATETIME,
+  processed_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_registration_requests_status_created
+  ON registration_requests(status, created_at);
