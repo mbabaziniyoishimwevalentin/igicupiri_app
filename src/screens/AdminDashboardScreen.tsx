@@ -192,6 +192,8 @@ export default function AdminDashboardScreen({ navigation }: any) {
   const [editUser, setEditUser] = useState<User | null>(null);
   const [userForm, setUserForm] = useState<Partial<User> & { password?: string }>({});
   const [userSearch, setUserSearch] = useState('');
+  const [regRequests, setRegRequests] = useState<Array<{ id:number; fullName:string; email:string; role:string; studentId:string|null; createdAt:string }>>([]);
+  const [regLoading, setRegLoading] = useState(false);
 
   const simpleLogout = () => {
     if (Platform.OS === 'web') {
@@ -263,6 +265,15 @@ export default function AdminDashboardScreen({ navigation }: any) {
         allUsers = await userService.getAllUsers() as any[];
         setUsers(allUsers as any);
       } catch(e) { setUsers([]); }
+
+      // Load pending lecturer registration requests from server
+      try {
+        setRegLoading(true);
+        const reqs = await api.admin.listRegistrationRequests('pending');
+        setRegRequests(reqs as any);
+      } catch {}
+      finally { setRegLoading(false); }
+
       setStats({
         totalPapers: merged.length,
         pendingReview: localPending.length,
@@ -882,6 +893,70 @@ export default function AdminDashboardScreen({ navigation }: any) {
               value={userSearch}
               onChangeText={setUserSearch}
             />
+
+            {/* Pending Lecturer Registrations */}
+            <View style={{ backgroundColor:'#fff', borderRadius:8, padding:12, borderWidth:1, borderColor:'#ecf0f1', marginBottom: 16 }}>
+              <Text style={{ fontSize:16, fontWeight:'700', color:'#2c3e50', marginBottom:8 }}>Pending Lecturer Registrations</Text>
+              {regLoading && <ActivityIndicator />}
+              {!regLoading && regRequests.length === 0 && (
+                <Text style={{ color:'#64748b' }}>No pending requests</Text>
+              )}
+              {!regLoading && regRequests.length > 0 && (
+                <View style={{ gap:10 }}>
+                  {regRequests.map((r)=> (
+                    <View key={r.id} style={{ borderWidth:1, borderColor:'#e5e7eb', borderRadius:8, padding:10 }}>
+                      <Text style={{ fontWeight:'700', color:'#1f2937' }}>{r.fullName}</Text>
+                      <Text style={{ color:'#334155' }}>Email: {r.email}</Text>
+                      <Text style={{ color:'#334155' }}>Role: {r.role}</Text>
+                      {!!r.studentId && <Text style={{ color:'#334155' }}>Student ID: {r.studentId}</Text>}
+                      <Text style={{ color:'#6b7280', fontSize:12, marginTop:4 }}>Requested: {new Date(r.createdAt).toLocaleString()}</Text>
+                      <View style={{ flexDirection:'row', gap:8, marginTop:8, justifyContent:'flex-end' }}>
+                        <TouchableOpacity
+                          style={[styles.smallBtn, { backgroundColor:'#27ae60' }]}
+                          onPress={async()=>{
+                            try {
+                              const res = await api.admin.approveRegistrationRequest(r.id);
+                              Alert.alert('Approved', 'Lecturer account created');
+                              setRegRequests(prev => prev.filter(x => x.id !== r.id));
+                              // Optionally add to users list
+                              try {
+                                const created = res.user;
+                                setUsers(prev => [{
+                                  id: created.id,
+                                  fullName: created.name,
+                                  email: created.email,
+                                  role: created.role as any,
+                                  status: 'active',
+                                  createdAt: created.created_at,
+                                } as any, ...prev]);
+                              } catch {}
+                            } catch (e:any) {
+                              Alert.alert('Error', e?.message || 'Failed to approve');
+                            }
+                          }}
+                        >
+                          <Text style={styles.smallBtnText}>Approve</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.smallBtn, { backgroundColor:'#e74c3c' }]}
+                          onPress={async()=>{
+                            try {
+                              await api.admin.rejectRegistrationRequest(r.id, 'Not eligible');
+                              Alert.alert('Rejected', 'Request rejected');
+                              setRegRequests(prev => prev.filter(x => x.id !== r.id));
+                            } catch (e:any) {
+                              Alert.alert('Error', e?.message || 'Failed to reject');
+                            }
+                          }}
+                        >
+                          <Text style={styles.smallBtnText}>Reject</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
 
             {/* Desktop header row */}
             {!isMobile && (

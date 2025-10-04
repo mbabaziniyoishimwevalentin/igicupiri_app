@@ -99,3 +99,7 @@ CREATE TABLE IF NOT EXISTS registration_requests (
 
 CREATE INDEX IF NOT EXISTS idx_registration_requests_status_created
   ON registration_requests(status, created_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_registration_requests_email_pending
+  ON registration_requests(email)
+  WHERE status = 'pending';

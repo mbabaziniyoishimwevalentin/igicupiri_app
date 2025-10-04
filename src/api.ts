@@ -71,6 +71,16 @@ export const api = {
     },
     async listLogs() {
       return http<Array<{ id: number; action: string; user: string; created_at: string }>>('/admin/logs');
+    },
+    async listRegistrationRequests(status?: 'pending'|'approved'|'rejected') {
+      const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+      return http<Array<{ id:number; fullName:string; email:string; role:string; studentId:string|null; status:string; reason?:string; createdAt:string; processedAt?:string; processedBy?:number }>>(`/admin/registration-requests${qs}`);
+    },
+    async approveRegistrationRequest(id: number) {
+      return http<{ ok: true; user: { id:number; name:string; email:string; role:string; student_id?:string; created_at:string } }>(`/admin/registration-requests/${id}/approve`, { method: 'POST' });
+    },
+    async rejectRegistrationRequest(id: number, reason?: string) {
+      return http<{ ok: true }>(`/admin/registration-requests/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) });
     }
   },
   settings: {

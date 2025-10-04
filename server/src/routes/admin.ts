@@ -165,4 +165,102 @@ router.patch('/users/:id/role', async (req, res) => {
   }
 });
 
+// ========== Registration Requests (Lecturer onboarding) ==========
+// List registration requests (default pending)
+router.get('/registration-requests', async (req, res) => {
+  try {
+    const status = String((req.query.status || 'pending')).toLowerCase();
+    const allowed = ['pending','approved','rejected'];
+    const where = allowed.includes(status) ? 'WHERE status=$1' : '';
+    const params = allowed.includes(status) ? [status] : [];
+    const result = await query(
+      `SELECT id, full_name AS fullName, email, role, student_id AS studentId, status, reason, created_at AS createdAt, processed_at AS processedAt, processed_by AS processedBy
+       FROM registration_requests ${where}
+       ORDER BY created_at DESC`,
+      params
+    );
+    res.json(result.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Approve a lecturer registration request: creates user and marks request approved
+router.post('/registration-requests/:id/approve', async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    // Load request
+    const rr = await query<{ id:number; full_name:string; email:string; password_hash:string; role:string; student_id:string|null; status:string }>(
+      'SELECT id, full_name, email, password_hash, role, student_id, status FROM registration_requests WHERE id=$1',
+      [id]
+    );
+    const r = rr.rows[0];
+    if (!r) return res.status(404).json({ error: 'Request not found' });
+    if (r.status !== 'pending') return res.status(400).json({ error: 'Request is not pending' });
+
+    // Ensure email not already taken
+    const existing = await query('SELECT id FROM users WHERE email=$1', [r.email.toLowerCase()]);
+    if (existing.rows.length) return res.status(409).json({ error: 'Email already in use' });
+
+    // Create user using stored password_hash
+    const inserted = await query<{ id:number }>(
+      `INSERT INTO users(full_name,email,password_hash,role,student_id) VALUES($1,$2,$3,$4,$5) RETURNING id`,
+      [r.full_name, r.email.toLowerCase(), r.password_hash, r.role === 'lecturer' ? 'lecturer' : 'student', r.student_id || null]
+    );
+    const userId = inserted.rows[0].id;
+
+    // Mark request approved
+    await query(
+      `UPDATE registration_requests SET status='approved', processed_at=CURRENT_TIMESTAMP, processed_by=$1 WHERE id=$2`,
+      [req.user?.id || null, id]
+    );
+
+    // Optional: notify user; create a notification row
+    try {
+      await query('INSERT INTO notifications(user_id, message) VALUES($1,$2)', [userId, 'Your lecturer account has been approved by admin.']);
+    } catch {}
+
+    // Log activity
+    try {
+      await query('INSERT INTO activity_logs(user_id, name, role, action) VALUES ($1,$2,$3,$4)', [userId, r.full_name, 'lecturer', 'lecturer_approved']);
+    } catch {}
+
+    // Return created user basic info
+    const userRow = await query(
+      `SELECT id, full_name AS name, email, role, student_id, created_at FROM users WHERE id=$1`,
+      [userId]
+    );
+    res.json({ ok: true, user: userRow.rows[0] });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Reject a lecturer registration request
+router.post('/registration-requests/:id/reject', async (req, res) => {
+  const id = Number(req.params.id);
+  const schema = z.object({ reason: z.string().min(1).optional() });
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const reason = parsed.data.reason || 'Rejected by admin';
+  try {
+    const rr = await query<{ status:string }>('SELECT status FROM registration_requests WHERE id=$1', [id]);
+    const curr = rr.rows[0];
+    if (!curr) return res.status(404).json({ error: 'Request not found' });
+    if (curr.status !== 'pending') return res.status(400).json({ error: 'Request is not pending' });
+
+    await query(
+      `UPDATE registration_requests SET status='rejected', reason=$1, processed_at=CURRENT_TIMESTAMP, processed_by=$2 WHERE id=$3`,
+      [reason, req.user?.id || null, id]
+    );
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 export default router;

@@ -15,26 +15,56 @@ const registerSchema = z.object({
   role: z.enum(['student','lecturer']).default('student')
 });
 
-// New: registration now creates a pending request, not an active user
+// Registration: students are created immediately; lecturers require admin approval (pending request)
 router.post('/register', async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const { fullName, studentId, email, password, role } = parsed.data;
+  let { fullName, studentId, email, password, role } = parsed.data as {
+    fullName: string; studentId: string | null | undefined; email: string; password: string; role: 'student'|'lecturer';
+  };
+
   try {
-    // Prevent duplicate email between active users and pending requests
+    email = email.trim().toLowerCase();
+
+    // Check if email already exists in active users
     const existingUser = await query('SELECT id FROM users WHERE email=$1', [email]);
-    if (existingUser.rows.length) return res.status(409).json({ error: 'Email already in use' });
-    const existingReq = await query('SELECT id FROM registration_requests WHERE email=$1 AND status="pending"', [email]);
-    if (existingReq.rows.length) return res.status(409).json({ error: 'Registration already pending approval' });
 
-    const password_hash = await bcrypt.hash(password, 10);
-    await query(
-      `INSERT INTO registration_requests(full_name,email,password_hash,role,student_id,status)
-       VALUES($1,$2,$3,$4,$5,'pending')`,
-      [fullName, email, password_hash, role, studentId || null] 
-    );
+    if (role === 'lecturer') {
+      // Lecturer flow: create a pending registration request
+      if (existingUser.rows.length) return res.status(409).json({ error: 'Email already in use' });
+      const existingReq = await query('SELECT id FROM registration_requests WHERE email=$1 AND status=\'pending\'', [email]);
+      if (existingReq.rows.length) return res.status(409).json({ error: 'Registration already pending approval' });
 
-    res.json({ ok: true, message: 'Registration submitted. Awaiting admin approval.' });
+      const password_hash = await bcrypt.hash(password, 10);
+      await query(
+        `INSERT INTO registration_requests(full_name,email,password_hash,role,student_id,status)
+         VALUES($1,$2,$3,$4,$5,'pending')`,
+        [fullName, email, password_hash, 'lecturer', studentId || null]
+      );
+
+      return res.json({ ok: true, message: 'Registration submitted. Awaiting admin approval.' });
+    } else {
+      // Student flow: create the account immediately
+      if (existingUser.rows.length) return res.status(409).json({ error: 'Email already in use' });
+
+      const password_hash = await bcrypt.hash(password, 10);
+      const inserted = await query<{ id: number }>(
+        `INSERT INTO users(full_name,email,password_hash,role,student_id) VALUES($1,$2,$3,$4,$5) RETURNING id`,
+        [fullName, email, password_hash, 'student', studentId || null]
+      );
+      const userId = inserted.rows[0].id;
+
+      // Issue JWT for immediate login
+      const token = jwt.sign({ id: userId, role: 'student' }, ENV.JWT_SECRET, { expiresIn: '7d' });
+
+      // Optional: log registration activity
+      await query(
+        'INSERT INTO activity_logs(user_id, name, role, action) VALUES ($1, $2, $3, $4)',
+        [userId, fullName, 'student', 'register']
+      );
+
+      return res.json({ token, user: { id: userId, role: 'student' } });
+    }
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });

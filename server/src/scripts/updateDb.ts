@@ -3,23 +3,23 @@ import { query } from '../config/db';
 async function main() {
   try {
     // Add downloads table
-    await pool.query(`
+    await query(`
       CREATE TABLE IF NOT EXISTS downloads (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         paper_id INTEGER NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
-        created_at TIMESTAMP DEFAULT NOW(),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(user_id, paper_id)
       );
     `);
 
     // Add bookmarks table
-    await pool.query(`
+    await query(`
       CREATE TABLE IF NOT EXISTS bookmarks (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         paper_id INTEGER NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
-        created_at TIMESTAMP DEFAULT NOW(),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(user_id, paper_id)
       );
     `);
