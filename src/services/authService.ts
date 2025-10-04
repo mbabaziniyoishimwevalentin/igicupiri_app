@@ -272,7 +272,12 @@ class AuthService {
       return { success: false, message: 'Registration failed' };
     } catch (error: any) {
       console.error('Registration error:', error);
-      return { success: false, message: error.message || 'Registration failed' };
+      const msg = error?.message || '';
+      // Simple approach: for lecturer sign-ups, treat "pending approval" as a success info state
+      if (data.role === 'lecturer' && /pending approval/i.test(msg)) {
+        return { success: true, message: 'Registration already pending approval' };
+      }
+      return { success: false, message: msg || 'Registration failed' };
     }
   }
 

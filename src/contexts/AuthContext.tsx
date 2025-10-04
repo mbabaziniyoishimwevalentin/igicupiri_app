@@ -99,6 +99,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(response.user);
         setIsAuthenticated(true);
         console.log('✅ Registration successful:', response.user.fullName);
+      } else if (response.success && !response.user && data.role === 'lecturer') {
+        // Simple approach: treat lecturer registration pending as informational success
+        setUser(null);
+        setIsAuthenticated(false);
+        console.log('ℹ️ Registration pending approval:', response.message);
       } else {
         setUser(null);
         setIsAuthenticated(false);
