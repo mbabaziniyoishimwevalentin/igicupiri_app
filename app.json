@@ -32,8 +32,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "3b360b1a-9684-4cae-8267-1de01e9017a3"
+        "projectId": "14f7976d-02f0-4519-a440-0a4b9b389cdd"
       }
-    }
+    },
+    "owner": "vavalidi"
   }
 }

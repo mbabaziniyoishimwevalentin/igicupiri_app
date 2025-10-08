@@ -10,7 +10,9 @@ const router = Router();
 const registerSchema = z.object({
   fullName: z.string().min(1),
   studentId: z.string().optional().nullable(),
-  email: z.string().email(),
+  email: z.string().email().refine((value) => !/\d/.test(value), {
+    message: 'Email must not contain numbers'
+  }),
   password: z.string().min(6),
   role: z.enum(['student','lecturer']).default('student')
 });
