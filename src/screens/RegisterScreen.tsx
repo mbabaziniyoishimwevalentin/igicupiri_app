@@ -48,6 +48,8 @@ export default function RegisterScreen({ navigation }: any) {
 
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required';
+    } else if (/\d/.test(formData.email)) {
+      newErrors.email = 'Email must not contain numbers';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email address';
     }
@@ -163,6 +165,7 @@ export default function RegisterScreen({ navigation }: any) {
               style={[errors.email && styles.inputError]}
               editable={!isLoading}
             />
+            <Text style={styles.inputHelperText}>Email must not contain numbers.</Text>
             {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
           </View>
 
@@ -338,6 +341,12 @@ const styles = StyleSheet.create({
   inputError: {
     borderColor: '#e74c3c',
     borderWidth: 1,
+  },
+  inputHelperText: {
+    color: '#7f8c8d',
+    fontSize: 12,
+    marginTop: 4,
+    marginLeft: 4,
   },
   errorText: {
     color: '#e74c3c',
