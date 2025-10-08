@@ -19,6 +19,7 @@ export default function RegisterScreen({ navigation }: any) {
   const { register, isLoading } = useAuth();
   const [formData, setFormData] = useState({
     fullName: '',
+    username: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -44,6 +45,12 @@ export default function RegisterScreen({ navigation }: any) {
     // Required fields validation
     if (!formData.fullName.trim()) {
       newErrors.fullName = 'Full name is required';
+    }
+
+    if (!formData.username.trim()) {
+      newErrors.username = 'Username is required';
+    } else if (/\d/.test(formData.username)) {
+      newErrors.username = 'Username must not contain numbers';
     }
 
     if (!formData.email.trim()) {
@@ -92,9 +99,15 @@ export default function RegisterScreen({ navigation }: any) {
       return;
     }
 
+    if (/\d/.test(formData.username)) {
+      Alert.alert('Invalid Username', 'Username must not contain numbers');
+      setErrors(prev => ({ ...prev, username: 'Username must not contain numbers' }));
+      return;
+    }
+
     try {
       const response = await register(formData);
-      
+
       if (response.success && response.user) {
         Alert.alert(
           'Registration Successful', 
@@ -151,6 +164,21 @@ export default function RegisterScreen({ navigation }: any) {
               editable={!isLoading}
             />
             {errors.fullName && <Text style={styles.errorText}>{errors.fullName}</Text>}
+          </View>
+
+          {/* Username */}
+          <View style={styles.inputContainer}>
+            <AuthTextInput
+              leftIcon="at-circle-outline"
+              placeholder="Username"
+              value={formData.username}
+              onChangeText={(value) => updateFormData('username', value)}
+              style={[errors.username && styles.inputError]}
+              editable={!isLoading}
+              autoCapitalize="none"
+            />
+            <Text style={styles.inputHelperText}>Username must not contain numbers.</Text>
+            {errors.username && <Text style={styles.errorText}>{errors.username}</Text>}
           </View>
 
           {/* Email */}

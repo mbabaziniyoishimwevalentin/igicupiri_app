@@ -9,6 +9,9 @@ const router = Router();
 
 const registerSchema = z.object({
   fullName: z.string().min(1),
+  username: z.string().min(1).refine((value) => !/\d/.test(value), {
+    message: 'Username must not contain numbers'
+  }),
   studentId: z.string().optional().nullable(),
   email: z.string().email().refine((value) => !/\d/.test(value), {
     message: 'Email must not contain numbers'
