@@ -91,7 +91,8 @@ export interface LoginCredentials {
 }
 
 export interface RegisterData {
-  fullName: string;
+  username: string;
+  fullName?: string;
   email: string;
   password: string;
   role: 'admin' | 'lecturer' | 'student';
@@ -229,7 +230,8 @@ class AuthService {
     try {
       console.log('🔄 Attempting registration for:', data.email);
       const payload = {
-        fullName: data.fullName.trim(),
+        fullName: (data.fullName?.trim() || data.username.trim()),
+        username: data.username.trim(),
         studentId: data.studentId?.trim() || null,
         email: data.email.trim().toLowerCase(),
         password: data.password,
@@ -239,7 +241,7 @@ class AuthService {
       // Server may return either { token, user } on immediate activation
       // OR { ok: true, message } when registration is pending approval.
       const result = await api.auth.register(
-        payload.fullName, payload.studentId, payload.email, payload.password, payload.role
+        payload.fullName, payload.username, payload.studentId, payload.email, payload.password, payload.role
       );
 
       const token = (result as any)?.token;

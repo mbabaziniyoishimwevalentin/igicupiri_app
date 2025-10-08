@@ -10,7 +10,6 @@ import {
   ActivityIndicator 
 } from 'react-native';
 import AuthTextInput from '../components/AuthTextInput';
-import PrimaryButton from '../components/PrimaryButton';
 import { useAuth } from '../contexts/AuthContext';
 
 const BLUE = '#2196F3';
@@ -18,7 +17,6 @@ const BLUE = '#2196F3';
 export default function RegisterScreen({ navigation }: any) {
   const { register, isLoading } = useAuth();
   const [formData, setFormData] = useState({
-    fullName: '',
     username: '',
     email: '',
     password: '',
@@ -43,10 +41,7 @@ export default function RegisterScreen({ navigation }: any) {
     const newErrors: Record<string, string> = {};
 
     // Required fields validation
-    if (!formData.fullName.trim()) {
-      newErrors.fullName = 'Full name is required';
-    }
-
+    
     if (!formData.username.trim()) {
       newErrors.username = 'Username is required';
     } else if (/\d/.test(formData.username)) {
@@ -55,8 +50,6 @@ export default function RegisterScreen({ navigation }: any) {
 
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required';
-    } else if (/\d/.test(formData.email)) {
-      newErrors.email = 'Email must not contain numbers';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email address';
     }
@@ -99,14 +92,20 @@ export default function RegisterScreen({ navigation }: any) {
       return;
     }
 
-    if (/\d/.test(formData.username)) {
-      Alert.alert('Invalid Username', 'Username must not contain numbers');
-      setErrors(prev => ({ ...prev, username: 'Username must not contain numbers' }));
-      return;
-    }
-
+    
     try {
-      const response = await register(formData);
+      const payload = {
+        username: formData.username.trim(),
+        fullName: formData.username.trim(),
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+        role: formData.role,
+        studentId: formData.role === 'student' ? formData.studentId : undefined,
+        department: formData.department,
+        course: formData.course,
+        year: formData.role === 'student' ? formData.year : undefined,
+      };
+      const response = await register(payload);
 
       if (response.success && response.user) {
         Alert.alert(
@@ -146,26 +145,14 @@ export default function RegisterScreen({ navigation }: any) {
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} bounces={false}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation?.goBack?.()}>
-            {/* Back button area */}
+          <TouchableOpacity onPress={() => navigation?.goBack?.()} accessibilityLabel="Go back">
+            <Text style={{ color: '#fff', fontSize: 16 }}>Back</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Create{"\n"}Account</Text>
         </View>
 
         <View style={styles.content}>
-          {/* Full Name */}
-          <View style={styles.inputContainer}>
-            <AuthTextInput 
-              leftIcon="person-outline" 
-              placeholder="Full name" 
-              value={formData.fullName} 
-              onChangeText={(value) => updateFormData('fullName', value)}
-              style={[errors.fullName && styles.inputError]}
-              editable={!isLoading}
-            />
-            {errors.fullName && <Text style={styles.errorText}>{errors.fullName}</Text>}
-          </View>
-
+          
           {/* Username */}
           <View style={styles.inputContainer}>
             <AuthTextInput
@@ -193,8 +180,7 @@ export default function RegisterScreen({ navigation }: any) {
               style={[errors.email && styles.inputError]}
               editable={!isLoading}
             />
-            <Text style={styles.inputHelperText}>Email must not contain numbers.</Text>
-            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+                        {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
           </View>
 
           {/* Role Selection */}

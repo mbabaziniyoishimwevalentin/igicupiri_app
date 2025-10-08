@@ -13,9 +13,7 @@ const registerSchema = z.object({
     message: 'Username must not contain numbers'
   }),
   studentId: z.string().optional().nullable(),
-  email: z.string().email().refine((value) => !/\d/.test(value), {
-    message: 'Email must not contain numbers'
-  }),
+  email: z.string().email(),
   password: z.string().min(6),
   role: z.enum(['student','lecturer']).default('student')
 });

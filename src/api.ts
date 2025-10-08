@@ -27,7 +27,40 @@ async function http<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error || 'Request failed');
+  if (!res.ok) {
+    let message = 'Request failed';
+    const err = (data as any)?.error;
+    if (typeof err === 'string') {
+      message = err;
+    } else if (err && typeof err === 'object') {
+      // Attempt to format Zod's flattened error or generic objects
+      const fieldErrors = (err as any)?.fieldErrors;
+      const formErrors = (err as any)?.formErrors;
+      if (fieldErrors || formErrors) {
+        const parts: string[] = [];
+        if (fieldErrors) {
+          for (const [field, msgs] of Object.entries(fieldErrors as Record<string, string[]>)) {
+            if (Array.isArray(msgs) && msgs.length) parts.push(`${field}: ${msgs.join(', ')}`);
+          }
+        }
+        if (Array.isArray(formErrors) && formErrors.length) {
+          parts.push(...formErrors);
+        }
+        if (parts.length) message = parts.join('; ');
+      } else {
+        try {
+          message = JSON.stringify(err);
+        } catch {
+          message = String(err);
+        }
+      }
+    } else if ((data as any)?.message) {
+      message = String((data as any).message);
+    } else {
+      message = `${res.status} ${res.statusText}`.trim();
+    }
+    throw new Error(message);
+  }
   return data as T;
 }
 
@@ -39,10 +72,10 @@ export const api = {
         { method: 'POST', body: JSON.stringify({ email, password }) }
       );
     },
-    async register(fullName: string, studentId: string | null, email: string, password: string, role: 'student'|'lecturer') {
+    async register(fullName: string, username: string, studentId: string | null, email: string, password: string, role: 'student'|'lecturer') {
       return http<{ token: string; user: { id: number; role: UserRole } }>(
         '/auth/register',
-        { method: 'POST', body: JSON.stringify({ fullName, studentId, email, password, role }) }
+        { method: 'POST', body: JSON.stringify({ fullName, username, studentId, email, password, role }) }
       );
     },
   },
