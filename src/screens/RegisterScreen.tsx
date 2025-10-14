@@ -316,13 +316,18 @@ export default function RegisterScreen({ navigation }: any) {
           </TouchableOpacity>
 
           {/* Back to Login */}
-          <TouchableOpacity 
-            onPress={() => navigation?.navigate?.('Login')} 
+          <TouchableOpacity
+            onPress={() => navigation?.navigate?.('Login')}
             style={styles.backToLogin}
             disabled={isLoading}
           >
             <Text style={styles.backToLoginText}>Already have an account? Sign in</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>© Ghislain Rugwiro. All rights reserved.</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -427,5 +432,16 @@ const styles = StyleSheet.create({
     color: BLUE,
     fontSize: 14,
     fontWeight: '500',
+  },
+  footer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+  },
+  footerText: {
+    color: '#7f8c8d',
+    fontSize: 12,
+    fontWeight: '400',
+    textAlign: 'center',
   },
 });

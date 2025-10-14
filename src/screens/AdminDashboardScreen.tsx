@@ -232,6 +232,25 @@ export default function AdminDashboardScreen({ navigation }: any) {
         uploadedBy: ''
       }));
 
+      // Load pending papers from server (for lecturer uploads)
+      const serverPendingPapers = await api.papers.list({});
+      const mappedPending: Paper[] = (serverPendingPapers as any[]).filter((p: any) => p.status === 'pending').map((p: any) => ({
+        id: p.id,
+        title: p.title,
+        course: p.course,
+        module: p.module,
+        year: p.year,
+        semester: p.semester,
+        examType: p.examType,
+        category: p.category,
+        status: 'pending',
+        created_at: p.createdAt || new Date().toISOString(),
+        department: p.department,
+        fileType: p.fileType,
+        fileSize: p.fileSize,
+        uploadedBy: p.uploadedBy || String(p.uploadedBy || '')
+      }));
+
       // Load locally pending papers for review (submitted but not yet approved)
       let localPending: Paper[] = [];
       try {
@@ -256,7 +275,7 @@ export default function AdminDashboardScreen({ navigation }: any) {
         })) as Paper[];
       } catch {}
 
-      const merged = [...localPending, ...mappedPublished];
+      const merged = [...mappedPending, ...localPending, ...mappedPublished];
       setPapers(merged);
 
       // Load users from local DB service
@@ -276,7 +295,7 @@ export default function AdminDashboardScreen({ navigation }: any) {
 
       setStats({
         totalPapers: merged.length,
-        pendingReview: localPending.length,
+        pendingReview: mappedPending.length,
         publishedPapers: mappedPublished.length,
         rejectedPapers: 0,
         totalUsers: allUsers.length,
@@ -514,10 +533,6 @@ export default function AdminDashboardScreen({ navigation }: any) {
       <ScrollView style={styles.content}>
         <Text style={styles.pageTitle}>Admin Dashboard</Text>
         <Text style={styles.pageSubtitle}>System overview and key metrics</Text>
-        {/* Add test logout button for debugging */}
-        <TouchableOpacity style={[styles.actionButton, { backgroundColor: '#e74c3c', marginBottom: 16 }]} onPress={() => navigation.navigate('LogoutTest')}>
-          <Text style={styles.actionButtonText}>Go to Logout Test Screen</Text>
-        </TouchableOpacity>
         {/* Stats Grid */}
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
@@ -588,8 +603,8 @@ export default function AdminDashboardScreen({ navigation }: any) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.quickActions}>
-            <TouchableOpacity 
-              style={[styles.actionButton, { backgroundColor: '#FF9800' }]}
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: '#FFC107' }]}
               onPress={() => setActiveTab('review')}
             >
               <Text style={styles.actionButtonText}>📝 Review Papers ({stats.pendingReview})</Text>
@@ -872,7 +887,22 @@ export default function AdminDashboardScreen({ navigation }: any) {
               <TextInput style={styles.input} placeholder="Full name" value={newUser.fullName} onChangeText={(v)=>setNewUser({ ...newUser, fullName: v })} />
               <TextInput style={styles.input} placeholder="Email" autoCapitalize="none" keyboardType="email-address" value={newUser.email} onChangeText={(v)=>setNewUser({ ...newUser, email: v })} />
               <TextInput style={styles.input} placeholder="Password" secureTextEntry value={newUser.password} onChangeText={(v)=>setNewUser({ ...newUser, password: v })} />
-              <TextInput style={styles.input} placeholder="Role (student/lecturer/admin)" value={newUser.role} onChangeText={(v)=>setNewUser({ ...newUser, role: (v as any) })} />
+              <View style={styles.roleSelector}>
+                {(['student','lecturer'] as const).map(option => {
+                  const isActive = newUser.role === option;
+                  return (
+                    <TouchableOpacity
+                      key={option}
+                      style={[styles.roleOption, isActive && styles.roleOptionActive]}
+                      onPress={() => setNewUser(prev => ({ ...prev, role: option }))}
+                    >
+                      <Text style={[styles.roleOptionText, isActive && styles.roleOptionTextActive]}>
+                        {option.charAt(0).toUpperCase() + option.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
               <TouchableOpacity style={styles.submitButton} onPress={async ()=>{
                 try{
                   const payload:any = { fullName: newUser.fullName.trim(), email: newUser.email.trim(), password: newUser.password, role: newUser.role||'student', studentId: newUser.studentId||null };
@@ -907,7 +937,6 @@ export default function AdminDashboardScreen({ navigation }: any) {
                     <View key={r.id} style={{ borderWidth:1, borderColor:'#e5e7eb', borderRadius:8, padding:10 }}>
                       <Text style={{ fontWeight:'700', color:'#1f2937' }}>{r.fullName}</Text>
                       <Text style={{ color:'#334155' }}>Email: {r.email}</Text>
-                      <Text style={{ color:'#334155' }}>Role: {r.role}</Text>
                       {!!r.studentId && <Text style={{ color:'#334155' }}>Student ID: {r.studentId}</Text>}
                       <Text style={{ color:'#6b7280', fontSize:12, marginTop:4 }}>Requested: {new Date(r.createdAt).toLocaleString()}</Text>
                       <View style={{ flexDirection:'row', gap:8, marginTop:8, justifyContent:'flex-end' }}>
@@ -965,7 +994,6 @@ export default function AdminDashboardScreen({ navigation }: any) {
                   <Text style={{ flex:0.5, fontWeight:'700', color:'#334155' }}>ID</Text>
                   <Text style={{ flex:1.5, fontWeight:'700', color:'#334155' }}>Name</Text>
                   <Text style={{ flex:2, fontWeight:'700', color:'#334155' }}>Email</Text>
-                  <Text style={{ flex:1, fontWeight:'700', color:'#334155' }}>Role</Text>
                   <Text style={{ flex:1, fontWeight:'700', color:'#334155' }}>Student ID</Text>
                   <Text style={{ flex:1.2, fontWeight:'700', color:'#334155' }}>Created</Text>
                   <Text style={{ flex:1, fontWeight:'700', color:'#334155' }}>Actions</Text>
@@ -979,7 +1007,6 @@ export default function AdminDashboardScreen({ navigation }: any) {
             <View style={styles.userCard}>
               <Text style={{ fontWeight:'700', color:'#1f2937', marginBottom:4 }}>{item.fullName || 'Unknown'}</Text>
               <Text style={{ color:'#334155' }}>Email: {item.email}</Text>
-              <Text style={{ color:'#334155' }}>Role: {item.role}</Text>
               {!!item.studentId && <Text style={{ color:'#334155' }}>Student ID: {item.studentId}</Text>}
               <Text style={{ color:'#6b7280', fontSize:12, marginTop:6 }}>Created: {item.createdAt ? new Date(String(item.createdAt)).toLocaleDateString() : ''}</Text>
               <View style={{ flexDirection:'row', gap:8, marginTop:10, justifyContent:'flex-end' }}>
@@ -1006,7 +1033,6 @@ export default function AdminDashboardScreen({ navigation }: any) {
                 <Text style={{ flex:0.5, color:'#334155' }}>{item.id}</Text>
                 <Text style={{ flex:1.5, color:'#334155' }}>{item.fullName||'Unknown'}</Text>
                 <Text style={{ flex:2, color:'#334155' }}>{item.email||''}</Text>
-                <Text style={{ flex:1, color:'#334155' }}>{item.role}</Text>
                 <Text style={{ flex:1, color:'#334155' }}>{item.studentId||''}</Text>
                 <Text style={{ flex:1.2, color:'#334155' }}>{item.createdAt ? new Date(String(item.createdAt)).toLocaleDateString() : ''}</Text>
                 <View style={{ flex:1, flexDirection:'row', gap:8, justifyContent:'flex-end' }}>
@@ -1158,12 +1184,11 @@ export default function AdminDashboardScreen({ navigation }: any) {
           <svg class='logo' viewBox='0 0 48 48'><circle cx='24' cy='24' r='22' fill='#2563eb'/><text x='24' y='30' text-anchor='middle' font-size='20' font-family='Arial' fill='#fff'>IG</text></svg>
           <div><h1 class='title'>IGICUPURI — System Activity Logs Report</h1><div class='meta'>Generated ${now}</div></div>
         </div>
-        <table><thead><tr><th>Date/Time</th><th>User</th><th>Role</th><th>Action</th></tr></thead><tbody>
+        <table><thead><tr><th>Date/Time</th><th>User</th><th>Action</th></tr></thead><tbody>
         ${logs.map(log => `
           <tr>
             <td>${new Date(log.created_at).toLocaleString()}</td>
             <td>${log.name}</td>
-            <td>${log.role}</td>
             <td>${log.action}</td>
           </tr>
         `).join('')}
@@ -1209,7 +1234,7 @@ export default function AdminDashboardScreen({ navigation }: any) {
             {logs.map(log => (
               <View key={log.id} style={{ padding: 12, borderBottomWidth: 1, borderColor: '#eee' }}>
                 <Text style={{ fontWeight: 'bold' }}>{log.action === 'login' ? 'User Login' : log.action}</Text>
-                <Text style={{ color: '#555' }}>By: {log.role.charAt(0).toUpperCase() + log.role.slice(1)} {log.name}</Text>
+                <Text style={{ color: '#555' }}>By: {log.name}</Text>
                 <Text style={{ color: '#888', fontSize: 12 }}>{new Date(log.created_at).toLocaleString()}</Text>
               </View>
             ))}
@@ -1335,7 +1360,6 @@ export default function AdminDashboardScreen({ navigation }: any) {
 
             <TextInput style={styles.input} placeholder="Full Name" value={userForm.fullName || ''} onChangeText={(v)=>setUserForm({ ...userForm, fullName: v })} />
             <TextInput style={styles.input} placeholder="Email" value={userForm.email || ''} onChangeText={(v)=>setUserForm({ ...userForm, email: v })} />
-            <TextInput style={styles.input} placeholder="Role (student/lecturer/admin)" value={(userForm.role as any) || ''} onChangeText={(v)=>setUserForm({ ...userForm, role: v as any })} />
             <TextInput style={styles.input} placeholder="Student ID" value={userForm.studentId || ''} onChangeText={(v)=>setUserForm({ ...userForm, studentId: v })} />
             <TextInput style={styles.input} placeholder="New Password (optional)" value={(userForm as any).password || ''} onChangeText={(v)=>setUserForm({ ...userForm, password: v })} />
 
@@ -1383,6 +1407,11 @@ export default function AdminDashboardScreen({ navigation }: any) {
           </View>
         </View>
       </Modal>
+
+      {/* Footer */}
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>© Ghislain Rugwiro. All rights reserved.</Text>
+      </View>
     </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -1611,24 +1640,26 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 12,
+    padding: 12,
+    borderRadius: 10,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 3,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
   statNumber: {
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#2c3e50',
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#7f8c8d',
-    marginTop: 4,
+    marginTop: 2,
     textAlign: 'center',
   },
   section: {
@@ -2075,6 +2106,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  roleSelector: {
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: '#f8fafc',
+    padding: 8,
+    borderRadius: 10,
+  },
+  roleOption: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#fff',
+  },
+  roleOptionActive: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  roleOptionText: {
+    color: '#334155',
+    fontWeight: '600',
+  },
+  roleOptionTextActive: {
+    color: '#fff',
+  },
   maintenanceButton: {
     backgroundColor: '#3498db',
     padding: 15,
@@ -2181,5 +2239,18 @@ const styles = StyleSheet.create({
     height: 40, // example value
     backgroundColor: 'transparent', // or any color you want
     // add other style properties as needed
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#2c3e50',
+    padding: 10,
+    alignItems: 'center',
+  },
+  footerText: {
+    color: '#ecf0f1',
+    fontSize: 12,
   },
 });

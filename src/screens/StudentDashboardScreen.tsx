@@ -1,9 +1,11 @@
 // (Removed stray/duplicate export and code at the top)
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Alert, TextInput, Modal, ScrollView, Platform, Linking, Share } from 'react-native';
-import { api } from '../api';
+import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Alert, TextInput, Modal, ScrollView, Platform, Linking, Share, Image } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { api, BASE_URL } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../services';
+import { authService } from '../services/authService';
 import { useResponsive } from '../utils/responsive';
 
 interface Paper { 
@@ -83,7 +85,6 @@ export default function StudentDashboardScreen({ navigation }: any) {
   const [bookmarkedPapers, setBookmarkedPapers] = useState<Paper[]>([]);
   const [downloadedPapers, setDownloadedPapers] = useState<Paper[]>([]);
   const [historyPapers, setHistoryPapers] = useState<Paper[]>([]);
-  const [studyList, setStudyList] = useState<Array<{ id:number; title:string; dueDate:string }>>([]);
   const [sortOption, setSortOption] = useState<'newest'|'popular'|'size'>('newest');
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -97,6 +98,7 @@ export default function StudentDashboardScreen({ navigation }: any) {
     reportsSubmitted: 0,
     studyHours: 0
   });
+  const [studentProfile, setStudentProfile] = useState<{ id: number; fullName: string; email: string; studentId: string | null; role: string; course?: string; year?: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<SearchFilters>({
@@ -110,6 +112,22 @@ export default function StudentDashboardScreen({ navigation }: any) {
   });
   const [notifications, setNotifications] = useState<{ id: number; title: string; createdAt: string; read: boolean }[]>([]);
   const [lastPaperCount, setLastPaperCount] = useState(0);
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [profileFullName, setProfileFullName] = useState('');
+  const [profileStudentId, setProfileStudentId] = useState('');
+  const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
+  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [pushNotifications, setPushNotifications] = useState(false);
+  const [showDocuments, setShowDocuments] = useState(false);
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
 
   async function loadDashboardData() {
     try {
@@ -139,17 +157,53 @@ export default function StudentDashboardScreen({ navigation }: any) {
       setPapers(mapped);
       setMasterPapers(mapped);
 
-      // Default empty placeholders for profile/stats/bookmarks/downloads unless endpoints exist
-      setBookmarkedPapers([]);
-      setDownloadedPapers([]);
-      setProfile(null);
+      // Load real stats from database
+      const realStats = await api.student.getStats();
       setStats({
-        totalPapers: mapped.length,
-        downloadsCount: 0,
-        bookmarksCount: 0,
-        reportsSubmitted: 0,
-        studyHours: 0
+        totalPapers: realStats.totalPapers,
+        downloadsCount: realStats.downloadsCount,
+        bookmarksCount: realStats.bookmarksCount,
+        reportsSubmitted: realStats.reportsSubmitted,
+        studyHours: 0 // Not tracked in API yet
       });
+
+      // Load bookmarks and downloads from database
+      const bookmarks = await api.student.getBookmarks();
+      const downloads = await api.student.getDownloads();
+      setBookmarkedPapers(bookmarks.map(b => ({
+        id: b.paperId,
+        title: b.title,
+        course: '',
+        module: '',
+        year: '',
+        semester: '1',
+        examType: 'mid',
+        category: 'past',
+        fileType: '',
+        fileSize: 0,
+        status: 'published',
+        createdAt: b.bookmarkedAt,
+        department: '',
+        downloadCount: 0,
+        rating: 0
+      })));
+      setDownloadedPapers(downloads.map(d => ({
+        id: d.paperId,
+        title: d.title,
+        course: '',
+        module: '',
+        year: '',
+        semester: '1',
+        examType: 'mid',
+        category: 'past',
+        fileType: '',
+        fileSize: 0,
+        status: 'published',
+        createdAt: d.downloadedAt,
+        department: '',
+        downloadCount: 0,
+        rating: 0
+      })));
 
     } catch (e: any) {
       console.error('Failed to load student dashboard from server:', e?.message || e);
@@ -157,7 +211,6 @@ export default function StudentDashboardScreen({ navigation }: any) {
       setPapers([]);
       setBookmarkedPapers([]);
       setDownloadedPapers([]);
-      setProfile(null);
       setStats({
         totalPapers: 0,
         downloadsCount: 0,
@@ -196,7 +249,7 @@ export default function StudentDashboardScreen({ navigation }: any) {
     );
   };
 
-  useEffect(() => { loadDashboardData(); }, []);
+  useEffect(() => { loadDashboardData(); loadStudentProfile(); }, []);
 
   // Load persisted lists
   useEffect(() => {
@@ -204,11 +257,9 @@ export default function StudentDashboardScreen({ navigation }: any) {
       const savedBookmarks = await storage.get<Paper[]>('student_bookmarks', []);
       const savedDownloads = await storage.get<Paper[]>('student_downloads', []);
       const savedHistory = await storage.get<Paper[]>('student_history', []);
-      const savedStudy = await storage.get<Array<{id:number; title:string; dueDate:string}>>('student_study', []);
       setBookmarkedPapers(savedBookmarks);
       setDownloadedPapers(savedDownloads);
       setHistoryPapers(savedHistory);
-      setStudyList(savedStudy);
     })();
   }, []);
 
@@ -216,7 +267,6 @@ export default function StudentDashboardScreen({ navigation }: any) {
   useEffect(() => { storage.set('student_bookmarks', bookmarkedPapers); }, [bookmarkedPapers]);
   useEffect(() => { storage.set('student_downloads', downloadedPapers); }, [downloadedPapers]);
   useEffect(() => { storage.set('student_history', historyPapers); }, [historyPapers]);
-  useEffect(() => { storage.set('student_study', studyList); }, [studyList]);
 
   // Poll for new papers every 30 seconds and store notifications
   useEffect(() => {
@@ -239,6 +289,37 @@ export default function StudentDashboardScreen({ navigation }: any) {
     }, 30000);
     return () => clearInterval(interval);
   }, [lastPaperCount]);
+  async function loadStudentProfile(){
+    try {
+      const profile = await api.student.getProfile();
+      setStudentProfile(profile);
+      setProfileFullName(profile.fullName || '');
+      setProfileStudentId(profile.studentId || '');
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to load profile.');
+    }
+  }
+
+  async function loadDocuments(){
+    try {
+      setDocumentsLoading(true);
+      // Load both downloads and bookmarks as "documents"
+      const [downloads, bookmarks] = await Promise.all([
+        api.student.getDownloads(),
+        api.student.getBookmarks()
+      ]);
+      const allDocs = [
+        ...downloads.map(d => ({ ...d, type: 'downloaded', date: d.downloadedAt })),
+        ...bookmarks.map(b => ({ ...b, type: 'bookmarked', date: b.bookmarkedAt }))
+      ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setDocuments(allDocs);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to load documents.');
+    } finally {
+      setDocumentsLoading(false);
+    }
+  }
+
   // (Removed stray code outside of functions)
 
   function clearFilters() {
@@ -343,8 +424,6 @@ export default function StudentDashboardScreen({ navigation }: any) {
       { id: 'search', title: '🔍 Search Papers', icon: '🔍' },
       { id: 'bookmarks', title: '🔖 Bookmarks', icon: '🔖', badge: stats.bookmarksCount },
       { id: 'downloads', title: '📥 Downloads', icon: '📥', badge: stats.downloadsCount },
-      { id: 'history', title: '🕘 History', icon: '🕘' },
-      { id: 'study', title: '📝 Study', icon: '📝' },
       { id: 'notifications', title: '🔔 Notifications', icon: '🔔', badge: notifications.filter(n => !n.read).length },
       { id: 'profile', title: '👤 Profile', icon: '👤' },
       { id: 'help', title: '❓ Help & Support', icon: '❓' },
@@ -355,7 +434,7 @@ export default function StudentDashboardScreen({ navigation }: any) {
       <View style={styles.sidebar}>
         <View style={styles.sidebarHeader}>
           <Text style={styles.sidebarTitle}>Student Portal</Text>
-          <Text style={styles.sidebarSubtitle}>{profile?.fullName || 'Student'}</Text>
+          <Text style={styles.sidebarSubtitle}>{studentProfile?.fullName || 'Student'}</Text>
         </View>
         
         {sidebarItems.map((item) => (
@@ -396,9 +475,9 @@ export default function StudentDashboardScreen({ navigation }: any) {
   function renderDashboard() {
     return (
       <ScrollView style={styles.content}>
-        <Text style={styles.pageTitle}>Welcome back, {profile?.fullName?.split(' ')[0] || 'Student'}!</Text>
+        <Text style={styles.pageTitle}>Welcome back, {studentProfile?.fullName?.split(' ')[0] || 'Student'}!</Text>
         <Text style={styles.pageSubtitle}>
-          {profile?.course} • {profile?.year} • Student ID: {profile?.studentId}
+          {studentProfile?.course} • {studentProfile?.year} • Student ID: {studentProfile?.studentId}
         </Text>
         
         {/* Stats Cards */}
@@ -800,83 +879,37 @@ export default function StudentDashboardScreen({ navigation }: any) {
     );
   }
 
-  function renderHistory() {
-    return (
-      <View style={styles.content}>
-        <Text style={styles.pageTitle}>History ({historyPapers.length})</Text>
-        <Text style={styles.pageSubtitle}>Recently opened or downloaded</Text>
-        <FlatList
-          data={historyPapers}
-          keyExtractor={(item)=> item.id.toString()}
-          renderItem={({item}) => (
-            <View style={styles.searchResultCard}>
-              <Text style={styles.resultTitle}>{item.title}</Text>
-              <Text style={styles.resultDetails}>{item.course} • {item.module}</Text>
-              <View style={styles.resultActions}>
-                <TouchableOpacity style={styles.openBtn} onPress={()=>openPaper(item)}>
-                  <Text style={styles.openBtnText}>Open</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.redownloadBtn} onPress={()=>handleDownload(item)}>
-                  <Text style={styles.redownloadBtnText}>Download</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        />
-      </View>
-    );
-  }
 
-  function renderStudy() {
-    return (
-      <View style={styles.content}>
-        <Text style={styles.pageTitle}>Study List ({studyList.length})</Text>
-        <Text style={styles.pageSubtitle}>Lightweight planner with due dates</Text>
-        <FlatList
-          data={studyList}
-          keyExtractor={(it)=> String(it.id)}
-          ListEmptyComponent={<Text style={{ color:'#64748b' }}>No study items yet. Add from search or history.</Text>}
-          renderItem={({item}) => (
-            <View style={styles.downloadCard}>
-              <Text style={styles.downloadTitle}>{item.title}</Text>
-              <Text style={styles.downloadMeta}>Due: {new Date(item.dueDate).toLocaleDateString()}</Text>
-              <View style={styles.downloadActions}>
-                <TouchableOpacity style={styles.openBtn} onPress={()=>{
-                  const paper = papers.find(p=>p.id===item.id) || historyPapers.find(p=>p.id===item.id);
-                  if (paper) openPaper(paper);
-                }}>
-                  <Text style={styles.openBtnText}>Open</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.removeBookmarkBtn} onPress={()=> setStudyList(prev => prev.filter(x=>x.id!==item.id))}>
-                  <Text style={styles.removeBookmarkBtnText}>Remove</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        />
-      </View>
-    );
-  }
 
   function renderProfile() {
     return (
       <ScrollView style={styles.content}>
         <Text style={styles.pageTitle}>Student Profile</Text>
-        
+
         <View style={styles.profileSection}>
           <View style={styles.profileHeader}>
             <View style={styles.profileAvatar}>
-              <Text style={styles.profileAvatarText}>
-                {profile?.fullName?.split(' ').map(n => n[0]).join('') || 'ST'}
-              </Text>
+              {profileAvatar ? (
+                Platform.OS === 'web' ? (
+                  // @ts-ignore
+                  <img src={profileAvatar} alt="avatar" style={{ width: '100%', height: '100%', borderRadius: 40, objectFit: 'cover' }} />
+                ) : (
+                  // @ts-ignore
+                  <Image source={{ uri: profileAvatar }} style={{ width: 80, height: 80, borderRadius: 40 }} />
+                )
+              ) : (
+                <Text style={styles.profileAvatarText}>
+                  {studentProfile?.fullName?.split(' ').map(n => n[0]).join('') || 'ST'}
+                </Text>
+              )}
             </View>
             <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>{profile?.fullName}</Text>
-              <Text style={styles.profileEmail}>{profile?.email}</Text>
+              <Text style={styles.profileName}>{studentProfile?.fullName}</Text>
+              <Text style={styles.profileEmail}>{studentProfile?.email}</Text>
               <Text style={styles.profileDetails}>
-                {profile?.course} • {profile?.year}
+                {studentProfile?.course} • {studentProfile?.year}
               </Text>
-              <Text style={styles.profileId}>Student ID: {profile?.studentId}</Text>
+              <Text style={styles.profileId}>Student ID: {studentProfile?.studentId}</Text>
             </View>
           </View>
 
@@ -896,14 +929,31 @@ export default function StudentDashboardScreen({ navigation }: any) {
           </View>
 
           <View style={styles.profileActions}>
-            <TouchableOpacity style={styles.profileButton}>
+            <TouchableOpacity style={styles.profileButton} onPress={() => {
+              setProfileFullName(studentProfile?.fullName || '');
+              setProfileStudentId(studentProfile?.studentId || '');
+              setShowEditProfile(true);
+            }}>
               <Text style={styles.profileButtonText}>Edit Profile</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.profileButton}>
+            <TouchableOpacity style={styles.profileButton} onPress={() => {
+              setCurrentPassword('');
+              setNewPassword('');
+              setConfirmPassword('');
+              setShowChangePassword(true);
+            }}>
               <Text style={styles.profileButtonText}>Change Password</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.profileButton}>
+            <TouchableOpacity style={styles.profileButton} onPress={() => {
+              setShowNotificationSettings(true);
+            }}>
               <Text style={styles.profileButtonText}>Notification Settings</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.profileButton} onPress={() => {
+              loadDocuments();
+              setShowDocuments(true);
+            }}>
+              <Text style={styles.profileButtonText}>My Documents</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.profileButton, styles.logoutButton]} onPress={simpleLogout}>
               <Text style={[styles.profileButtonText, styles.logoutButtonText]}>Logout</Text>
@@ -960,14 +1010,25 @@ export default function StudentDashboardScreen({ navigation }: any) {
 
         <View style={styles.helpSection}>
           <Text style={styles.helpSectionTitle}>📞 Contact Support</Text>
-          <TouchableOpacity style={styles.contactButton}>
+          <TouchableOpacity style={styles.contactButton} onPress={() => {
+            Alert.alert(
+              'Admin Contact',
+              'Email: admin@igicupuri.edu\nPhone: +250736916491',
+              [
+                { text: 'Copy Email', onPress: () => {
+                  if (Platform.OS === 'web') {
+                    navigator.clipboard.writeText('admin@igicupuri.edu');
+                    Alert.alert('Copied', 'Email copied to clipboard');
+                  } else {
+                    Alert.alert('Email', 'admin@igicupuri.edu');
+                  }
+                }},
+                { text: 'Call', onPress: () => Linking.openURL('tel:+250736916491') },
+                { text: 'Close', style: 'cancel' }
+              ]
+            );
+          }}>
             <Text style={styles.contactButtonText}>📧 Email Support</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.contactButton}>
-            <Text style={styles.contactButtonText}>💬 Live Chat</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.contactButton}>
-            <Text style={styles.contactButtonText}>📞 Call Support</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -979,17 +1040,29 @@ export default function StudentDashboardScreen({ navigation }: any) {
       <ScrollView style={styles.content}>
         <Text style={styles.pageTitle}>Notifications</Text>
         {notifications.length === 0 ? (
-          <Text style={styles.pageSubtitle}>No new files or exams uploaded.</Text>
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyIcon}>🔔</Text>
+            <Text style={styles.emptyTitle}>No notifications</Text>
+            <Text style={styles.emptyText}>New papers will appear here when uploaded.</Text>
+          </View>
         ) : (
           <View>
             <Text style={styles.sectionTitle}>Newly Uploaded Files:</Text>
             {notifications.map((n, idx) => (
-              <View key={n.id} style={{ marginBottom: 12, backgroundColor: n.read ? '#f5f5f5' : '#e3fcec', padding: 12, borderRadius: 8 }}>
-                <Text style={{ fontWeight: 'bold' }}>{n.title}</Text>
-                <Text style={{ fontSize: 12, color: '#888' }}>Uploaded at {new Date(n.createdAt).toLocaleString()}</Text>
+              <View key={n.id} style={styles.notifCard}>
+                <View style={styles.notifHeader}>
+                  <View style={styles.notifIcon}>
+                    <Text style={styles.notifIconText}>📄</Text>
+                  </View>
+                  <View style={styles.notifContent}>
+                    <Text style={styles.notifMessage}>{n.title}</Text>
+                    <Text style={styles.notifMeta}>Uploaded at {new Date(n.createdAt).toLocaleString()}</Text>
+                  </View>
+                  {!n.read && <View style={styles.unreadDot} />}
+                </View>
                 {!n.read && (
-                  <TouchableOpacity style={{ marginTop: 6 }} onPress={() => setNotifications(prev => prev.map((x, i) => i === idx ? { ...x, read: true } : x))}>
-                    <Text style={{ color: '#2196F3' }}>Mark as read</Text>
+                  <TouchableOpacity style={styles.notifMarkBtn} onPress={() => setNotifications(prev => prev.map((x, i) => i === idx ? { ...x, read: true } : x))}>
+                    <Text style={styles.notifMarkBtnText}>Mark as read</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -1006,8 +1079,6 @@ export default function StudentDashboardScreen({ navigation }: any) {
       case 'search': return renderSearch();
       case 'bookmarks': return renderBookmarks();
       case 'downloads': return renderDownloads();
-      case 'history': return renderHistory();
-      case 'study': return renderStudy();
       case 'profile': return renderProfile();
       case 'help': return renderHelp();
       case 'notifications': return renderNotifications();
@@ -1023,7 +1094,7 @@ export default function StudentDashboardScreen({ navigation }: any) {
       {/* Mobile header with menu button */}
       {isMobile && (
         <View style={styles.mobileHeader}>
-          <TouchableOpacity style={styles.menuButton} onPress={() => setMenuOpen(true)}>
+          <TouchableOpacity style={styles.menuButton} onPress={() => setMenuOpen(!menuOpen)}>
             <Text style={styles.menuButtonText}>☰ Menu</Text>
           </TouchableOpacity>
           <Text style={styles.mobileHeaderTitle}>Student Portal</Text>
@@ -1057,9 +1128,9 @@ export default function StudentDashboardScreen({ navigation }: any) {
           </View>
         )}
 
-        <View style={[styles.content, isMobile && styles.contentMobile]}>
-          {renderContent()}
-        </View>
+      <View style={[styles.content, isMobile && styles.contentMobile]} pointerEvents={isMobile && menuOpen ? 'none' : 'auto'}>
+        {renderContent()}
+      </View>
       </View>
       {/* Preview Modal (Web) */}
       <Modal visible={previewVisible} animationType="fade" transparent={true} onRequestClose={()=>setPreviewVisible(false)}>
@@ -1078,7 +1149,7 @@ export default function StudentDashboardScreen({ navigation }: any) {
       </Modal>
 
       {/* Report Modal */}
-      <Modal visible={!!reportingPaper} animationType="fade" transparent onRequestClose={()=>setReportingPaper(null)}>
+      <Modal visible={!!reportingPaper} animationType="fade" transparent statusBarTranslucent={true} onRequestClose={()=>setReportingPaper(null)}>
         <View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'center', alignItems:'center', padding:20 }}>
           <View style={{ backgroundColor:'#fff', borderRadius:12, padding:16, width:'100%', maxWidth:420 }}>
             <Text style={{ fontSize:18, fontWeight:'700', marginBottom:8 }}>Report a Problem</Text>
@@ -1089,7 +1160,7 @@ export default function StudentDashboardScreen({ navigation }: any) {
                 <Text style={styles.clearButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.searchButton} onPress={async()=>{
-                if (!reportingPaper) return; 
+                if (!reportingPaper) return;
                 try { await api.reports.create(reportingPaper.id, reportReason || 'Issue'); Alert.alert('Submitted','Thank you for your report'); setReportingPaper(null); setReportReason('Incorrect metadata'); } catch(e:any){ Alert.alert('Error', e?.message||'Failed to submit'); }
               }}>
                 <Text style={styles.searchButtonText}>Submit</Text>
@@ -1098,6 +1169,208 @@ export default function StudentDashboardScreen({ navigation }: any) {
           </View>
         </View>
       </Modal>
+
+      {/* Edit Profile Modal */}
+      <Modal visible={showEditProfile} animationType="fade" transparent statusBarTranslucent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Edit Profile</Text>
+            <ScrollView style={styles.modalForm}>
+              <TextInput style={styles.modalInput} value={profileFullName} onChangeText={setProfileFullName} placeholder="Full name" />
+              <TextInput style={styles.modalInput} value={profileStudentId} onChangeText={setProfileStudentId} placeholder="Student ID" />
+              <View style={{ marginBottom: 10 }}>
+                <Text style={{ marginBottom: 6, color: '#2c3e50' }}>Avatar</Text>
+                {Platform.OS === 'web' ? (
+                  <input type="file" accept="image/*" onChange={async (e:any)=>{
+                    const f = e.target.files?.[0]; if (!f) return;
+                    if (f.size > 2 * 1024 * 1024) { Alert.alert('Error', 'Image too large (max 2MB)'); return; }
+                    const reader = new FileReader();
+                    reader.onload = async () => {
+                      const dataUrl = String(reader.result || '');
+                      setProfileAvatar(dataUrl);
+                    };
+                    reader.readAsDataURL(f);
+                  }} />
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.modalButton, { backgroundColor: '#3498db', marginBottom: 0 }]}
+                    onPress={async () => {
+                      try {
+                        // Request permissions
+                        const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                        if (permissionResult.granted === false) {
+                          Alert.alert('Permission required', 'Permission to access camera roll is required!');
+                          return;
+                        }
+
+                        // Launch image picker
+                        const result = await ImagePicker.launchImageLibraryAsync({
+                          mediaTypes: ['images'],
+                          allowsEditing: true,
+                          aspect: [1, 1],
+                          quality: 0.8,
+                          base64: true,
+                        });
+
+                        if (!result.canceled && result.assets && result.assets[0]) {
+                          const asset = result.assets[0];
+                          if (asset.base64) {
+                            const dataUrl = `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}`;
+                            setProfileAvatar(dataUrl);
+                          } else if (asset.uri) {
+                            // Fallback if base64 not available
+                            setProfileAvatar(asset.uri);
+                          }
+                        }
+                      } catch (error) {
+                        console.error('Avatar upload error:', error);
+                        Alert.alert('Error', 'Failed to upload avatar');
+                      }
+                    }}
+                  >
+                    <Text style={styles.saveButtonText}>Upload Avatar</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={()=> setShowEditProfile(false)}>
+                <Text style={styles.cancelButtonText}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={async ()=>{
+                try { setProfileSaving(true);
+                  await api.student.updateProfile(profileFullName, profileStudentId);
+                  Alert.alert('Updated', 'Profile saved');
+                  setShowEditProfile(false);
+                  loadStudentProfile(); // Refresh profile data
+                } catch (err: any) {
+                  Alert.alert('Failed', err.message || 'Could not update');
+                } finally { setProfileSaving(false); }
+              }}>
+                <Text style={styles.saveButtonText}>{profileSaving? 'Saving...' : 'Save Changes'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Change Password Modal */}
+      <Modal visible={showChangePassword} animationType="fade" transparent statusBarTranslucent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Change Password</Text>
+            <ScrollView style={styles.modalForm}>
+              <TextInput style={styles.modalInput} value={currentPassword} onChangeText={setCurrentPassword} placeholder="Current password" secureTextEntry />
+              <TextInput style={styles.modalInput} value={newPassword} onChangeText={setNewPassword} placeholder="New password" secureTextEntry />
+              <TextInput style={styles.modalInput} value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Confirm new password" secureTextEntry />
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={()=> setShowChangePassword(false)}>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={async ()=>{
+                if (newPassword !== confirmPassword) { Alert.alert('Error', 'Passwords do not match'); return; }
+                if (newPassword.length < 6) { Alert.alert('Error', 'Password must be at least 6 characters'); return; }
+                try { setPasswordSaving(true);
+                  await authService.changePassword(currentPassword, newPassword);
+                  Alert.alert('Success', 'Password changed successfully');
+                  setShowChangePassword(false);
+                } catch (err: any) {
+                  Alert.alert('Failed', err.message || 'Could not change password');
+                } finally { setPasswordSaving(false); }
+              }}>
+                <Text style={styles.saveButtonText}>{passwordSaving? 'Changing...' : 'Change Password'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Notification Settings Modal */}
+      <Modal visible={showNotificationSettings} animationType="fade" transparent statusBarTranslucent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Notification Settings</Text>
+            <ScrollView style={styles.modalForm}>
+              <View style={styles.settingItem}>
+                <Text style={styles.settingLabel}>Email Notifications</Text>
+                <TouchableOpacity style={[styles.toggleButton, emailNotifications && styles.toggleButtonActive]} onPress={()=>setEmailNotifications(!emailNotifications)}>
+                  <Text style={[styles.toggleText, emailNotifications && styles.toggleTextActive]}>{emailNotifications ? 'ON' : 'OFF'}</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.settingDescription}>Receive email notifications for new papers and updates</Text>
+              <View style={styles.settingItem}>
+                <Text style={styles.settingLabel}>Push Notifications</Text>
+                <TouchableOpacity style={[styles.toggleButton, pushNotifications && styles.toggleButtonActive]} onPress={()=>setPushNotifications(!pushNotifications)}>
+                  <Text style={[styles.toggleText, pushNotifications && styles.toggleTextActive]}>{pushNotifications ? 'ON' : 'OFF'}</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.settingDescription}>Receive push notifications in your browser</Text>
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={()=> setShowNotificationSettings(false)}>
+                <Text style={styles.cancelButtonText}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={async ()=>{
+                // Save settings (mock implementation - in real app, save to database)
+                Alert.alert('Saved', 'Notification settings updated');
+                setShowNotificationSettings(false);
+              }}>
+                <Text style={styles.saveButtonText}>Save Settings</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Documents Modal */}
+      <Modal visible={showDocuments} animationType="fade" transparent statusBarTranslucent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>My Documents</Text>
+            <ScrollView style={styles.modalForm}>
+              {documentsLoading ? (
+                <Text style={{ textAlign: 'center', padding: 20 }}>Loading documents...</Text>
+              ) : documents.length === 0 ? (
+                <Text style={{ textAlign: 'center', padding: 20 }}>No documents found</Text>
+              ) : (
+                documents.map((doc, index) => (
+                  <View key={index} style={styles.documentItem}>
+                    <View style={styles.documentInfo}>
+                      <Text style={styles.documentTitle}>{doc.title}</Text>
+                      <Text style={styles.documentMeta}>
+                        {doc.course} • {doc.module} • {doc.type === 'downloaded' ? 'Downloaded' : 'Bookmarked'} on {new Date(doc.date).toLocaleDateString()}
+                      </Text>
+                    </View>
+                    <TouchableOpacity style={styles.documentAction} onPress={() => {
+                      // Open document (download or view)
+                      if (doc.type === 'downloaded') {
+                        // For downloaded, we can try to download again or view
+                        Linking.openURL(`${BASE_URL}/papers/${doc.paperId}/download`);
+                      } else {
+                        // For bookmarked, navigate to paper details or download
+                        Linking.openURL(`${BASE_URL}/papers/${doc.paperId}/download`);
+                      }
+                    }}>
+                      <Text style={styles.documentActionText}>{doc.type === 'downloaded' ? 'Download' : 'View'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={()=> setShowDocuments(false)}>
+                <Text style={styles.cancelButtonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Footer */}
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>© Ghislain Rugwiro. All rights reserved.</Text>
+      </View>
     </SafeAreaView>
   );
 }
@@ -1564,31 +1837,34 @@ const styles = StyleSheet.create({
   },
   resultActions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 6,
+    flexWrap: 'wrap',
   },
   downloadBtn: {
     flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
+    minWidth: 70,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 4,
     backgroundColor: '#27ae60',
     alignItems: 'center',
   },
   bookmarkBtnSmall: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
+    minWidth: 60,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 4,
     backgroundColor: '#f39c12',
     alignItems: 'center',
   },
   downloadBtnText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
   },
   bookmarkBtnText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
   },
   bookmarkCard: {
@@ -1865,5 +2141,232 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modalForm: {
+    marginBottom: 20,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 12,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modalButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#95a5a6',
+  },
+  saveButton: {
+    backgroundColor: '#27ae60',
+  },
+  cancelButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  settingItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  settingLabel: {
+    fontSize: 16,
+    color: '#2c3e50',
+    flex: 1,
+  },
+  toggleButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#ddd',
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  toggleButtonActive: {
+    backgroundColor: '#27ae60',
+  },
+  toggleText: {
+    color: '#666',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  toggleTextActive: {
+    color: '#fff',
+  },
+  settingDescription: {
+    fontSize: 12,
+    color: '#7f8c8d',
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  documentItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  documentInfo: {
+    flex: 1,
+  },
+  documentTitle: {
+    fontSize: 16,
+    color: '#2c3e50',
+    fontWeight: '500',
+  },
+  documentMeta: {
+    fontSize: 12,
+    color: '#7f8c8d',
+    marginTop: 4,
+  },
+  documentAction: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#3498db',
+    borderRadius: 6,
+    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  documentActionText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    padding: 40,
+  },
+  emptyIcon: {
+    fontSize: 40,
+    marginBottom: 8,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    color: '#7f8c8d',
+    marginBottom: 8,
+    fontWeight: '600',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#95a5a6',
+    textAlign: 'center',
+  },
+  notifCard: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ecf0f1',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  notifHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  notifIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f8f9fa',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  notifIconText: {
+    fontSize: 18,
+  },
+  notifContent: {
+    flex: 1,
+  },
+  notifMessage: {
+    color: '#2c3e50',
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  notifMeta: {
+    color: '#7f8c8d',
+    fontSize: 12,
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#e74c3c',
+    marginTop: 4,
+  },
+  notifMarkBtn: {
+    backgroundColor: '#3498db',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  notifMarkBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#2c3e50',
+    padding: 10,
+    alignItems: 'center',
+  },
+  footerText: {
+    color: '#ecf0f1',
+    fontSize: 12,
   },
 });

@@ -11,7 +11,8 @@ export type UserRole = 'student' | 'lecturer' | 'admin';
 // Set EXPO_PUBLIC_API_URL in your .env or EAS config for production
 const envUrl = (global as any).process?.env?.EXPO_PUBLIC_API_URL as string | undefined;
 // Fallback order: EAS env > LAN IP (for mobile on same WiFi) > localhost (for web dev)
-let BASE_URL = envUrl || 'https://igicupiri-app.onrender.com';
+// For local development, use localhost; for production, use deployed URL
+export let BASE_URL = envUrl || (Platform.OS === 'web' ? 'https://igicupiri-app.onrender.com' : 'https://igicupiri-app.onrender.com');
 // For production, set EXPO_PUBLIC_API_URL to your deployed backend URL
 let TOKEN: string | null = null;
 
@@ -145,6 +146,12 @@ export const api = {
     },
     async markNotificationRead(id:number){
       return http<{ ok: true }>(`/lecturer/notifications/${id}/read`, { method: 'PATCH' });
+    },
+    async getProfile(){
+      return http<{ id: number; fullName: string; email: string; studentId: string | null; role: string; createdAt: string }>('/student/profile');
+    },
+    async updateProfile(fullName: string, studentId: string | null){
+      return http<{ ok: true }>('/student/profile', { method: 'PATCH', body: JSON.stringify({ fullName, studentId }) });
     }
   },
   student: {

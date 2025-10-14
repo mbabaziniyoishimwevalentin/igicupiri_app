@@ -47,13 +47,29 @@ async function getAuthToken(): Promise<string | null> {
     // Web: use localStorage
     if (typeof window !== 'undefined' && (window as any).localStorage) {
       const ls = (window as any).localStorage as Storage;
-      return ls.getItem('token') || ls.getItem('auth_token');
+      const item = ls.getItem('auth_token') || ls.getItem('token');
+      if (item) {
+        try {
+          const parsed = JSON.parse(item);
+          return parsed.token || item;
+        } catch {
+          return item;
+        }
+      }
     }
     // Native: use Expo SecureStore
     try {
       const SecureStore = require('expo-secure-store');
       if (SecureStore?.getItemAsync) {
-        return await SecureStore.getItemAsync('auth_token');
+        const item = await SecureStore.getItemAsync('auth_token');
+        if (item) {
+          try {
+            const parsed = JSON.parse(item);
+            return parsed.token || item;
+          } catch {
+            return item;
+          }
+        }
       }
     } catch {}
   } catch {}
@@ -193,7 +209,7 @@ class UserService {
       const payload: any = {};
       if (updates.fullName !== undefined) payload.fullName = updates.fullName;
       if (updates.email !== undefined) payload.email = updates.email;
-      if (updates.role !== undefined) payload.role = updates.role;
+      // Role is no longer updatable since it's removed from UI
       if (updates.studentId !== undefined) payload.studentId = updates.studentId;
       if ((updates as any).password !== undefined) payload.password = (updates as any).password;
 

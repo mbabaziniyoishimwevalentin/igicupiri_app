@@ -140,7 +140,44 @@ router.delete('/papers/:id', async (req: any, res) => {
   try {
     await query('DELETE FROM papers WHERE id=$1 AND uploaded_by=$2', [id, req.user!.id]);
     res.json({ ok: true });
-  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get lecturer profile
+router.get('/profile', async (req: any, res) => {
+  try {
+    const result = await query(
+      `SELECT id, full_name AS "fullName", email, student_id AS "studentId", role, created_at AS "createdAt"
+       FROM users WHERE id=$1`,
+      [req.user!.id]
+    );
+    if (!result.rows || !result.rows[0]) return res.status(404).json({ error: 'User not found' });
+    res.json(result.rows[0]);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update lecturer profile
+router.patch('/profile', async (req: any, res) => {
+  const { fullName, studentId } = req.body as Record<string, string>;
+  const fields: string[] = [];
+  const values: any[] = [];
+  if (fullName !== undefined) { values.push(fullName); fields.push(`full_name=$${values.length}`); }
+  if (studentId !== undefined) { values.push(studentId); fields.push(`student_id=$${values.length}`); }
+  if (!fields.length) return res.json({ ok: true });
+  try {
+    values.push(req.user!.id);
+    await query(`UPDATE users SET ${fields.join(',')} WHERE id=$${values.length}`, values);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 export default router;

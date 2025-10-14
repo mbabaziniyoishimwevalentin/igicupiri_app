@@ -70,24 +70,9 @@ export default function App() {
           {route === 'Landing' && <LandingScreen navigation={navigation} />}
           {route === 'Login' && <LoginScreen navigation={navigation} />}
           {route === 'Register' && <RegisterScreen navigation={navigation} />}
-          {route === 'Admin' && (
-            <View style={{ flex: 1 }}>
-              <AdminDashboardScreen navigation={navigation} />
-              <BottomNav onNavigate={navigation.navigate} />
-            </View>
-          )}
-          {route === 'Lecturer' && (
-            <View style={{ flex: 1 }}>
-              <LecturerDashboardScreen navigation={navigation} />
-              <BottomNav onNavigate={navigation.navigate} />
-            </View>
-          )}
-          {route === 'Student' && (
-            <View style={{ flex: 1 }}>
-              <StudentDashboardScreen navigation={navigation} />
-              <BottomNav onNavigate={navigation.navigate} />
-            </View>
-          )}
+          {route === 'Admin' && <AdminDashboardScreen navigation={navigation} />}
+          {route === 'Lecturer' && <LecturerDashboardScreen navigation={navigation} />}
+          {route === 'Student' && <StudentDashboardScreen navigation={navigation} />}
           <StatusBar style="light" />
         </View>
       </AuthProvider>

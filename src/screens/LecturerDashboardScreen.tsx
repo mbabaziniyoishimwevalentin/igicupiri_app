@@ -97,12 +97,20 @@ function LecturerDashboardScreen(props: LecturerDashboardScreenProps) {
       const papers = await api.lecturer.myPapers();
       if (Array.isArray(papers)) {
         setMyPapers(papers);
+        // Calculate dynamic stats from fetched papers
+        const totalPapers = papers.length;
+        const publishedPapers = papers.filter(p => p.status === 'published').length;
+        const pendingPapers = papers.filter(p => p.status === 'pending').length;
+        const totalDownloads = papers.reduce((sum, p) => sum + ((p as any).downloadCount || 0), 0);
+        setStats({ totalPapers, publishedPapers, pendingPapers, totalDownloads });
       } else {
         setMyPapers([]);
+        setStats({ totalPapers: 0, publishedPapers: 0, pendingPapers: 0, totalDownloads: 0 });
       }
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to fetch papers.');
       setMyPapers([]);
+      setStats({ totalPapers: 0, publishedPapers: 0, pendingPapers: 0, totalDownloads: 0 });
     }
   };
 
@@ -136,6 +144,16 @@ function LecturerDashboardScreen(props: LecturerDashboardScreenProps) {
   useEffect(() => {
     fetchMyPapers();
     loadNotifications();
+    loadProfile();
+  }, []);
+
+  // Polling for notifications every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadNotifications();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
   }, []);
   const [stats, setStats] = useState({ totalPapers: 0, publishedPapers: 0, pendingPapers: 0, totalDownloads: 0 });
   const [uploadForm, setUploadForm] = useState({ title: '', course: '', module: '', department: '', year: '', semester: '1', examType: 'final', category: 'exam' });
@@ -148,6 +166,7 @@ function LecturerDashboardScreen(props: LecturerDashboardScreenProps) {
   const [profileFullName, setProfileFullName] = useState('');
   const [profileDepartment, setProfileDepartment] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
+  const [lecturerProfile, setLecturerProfile] = useState<{ id: number; fullName: string; email: string; studentId: string | null; role: string; createdAt: string } | null>(null);
   const [oldPwd, setOldPwd] = useState('');
   const [newPwd, setNewPwd] = useState('');
     const [notifications, setNotifications] = useState<Array<{ id:number; message:string; read:boolean; createdAt:string }>>([]);
@@ -178,6 +197,15 @@ function LecturerDashboardScreen(props: LecturerDashboardScreenProps) {
       const list = await api.lecturer.getNotifications();
       setNotifications(Array.isArray(list) ? list : []);
     } catch {}
+  }
+
+  async function loadProfile(){
+    try {
+      const profile = await api.lecturer.getProfile();
+      setLecturerProfile(profile);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to load profile.');
+    }
   }
 
   // Dummy authService for now
@@ -488,17 +516,25 @@ function LecturerDashboardScreen(props: LecturerDashboardScreenProps) {
         ) : (
           notifications.map((n) => (
             <View key={n.id} style={styles.notifCard}>
-              <Text style={styles.notifMessage}>{n.message}</Text>
-              <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginTop:6 }}>
-                <Text style={styles.notifMeta}>{new Date(n.createdAt).toLocaleString()}</Text>
-                {!n.read && (
-                  <TouchableOpacity style={styles.notifMarkBtn} onPress={async ()=>{
-                    try { await api.lecturer.markNotificationRead(n.id); loadNotifications(); } catch {}
-                  }}>
-                    <Text style={styles.notifMarkBtnText}>Mark as read</Text>
-                  </TouchableOpacity>
-                )}
+              <View style={styles.notifHeader}>
+                <View style={styles.notifIcon}>
+                  <Text style={styles.notifIconText}>
+                    {n.message.includes('reported') ? '⚠️' : n.message.includes('approved') ? '✅' : n.message.includes('rejected') ? '❌' : '📢'}
+                  </Text>
+                </View>
+                <View style={styles.notifContent}>
+                  <Text style={styles.notifMessage}>{n.message}</Text>
+                  <Text style={styles.notifMeta}>{new Date(n.createdAt).toLocaleString()}</Text>
+                </View>
+                {!n.read && <View style={styles.unreadDot} />}
               </View>
+              {!n.read && (
+                <TouchableOpacity style={styles.notifMarkBtn} onPress={async ()=>{
+                  try { await api.lecturer.markNotificationRead(n.id); loadNotifications(); } catch {}
+                }}>
+                  <Text style={styles.notifMarkBtnText}>Mark as read</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ))
         )}
@@ -700,13 +736,13 @@ function LecturerDashboardScreen(props: LecturerDashboardScreenProps) {
                   <Image source={{ uri: authUser.avatarUrl }} style={{ width: 80, height: 80, borderRadius: 40 }} />
                 )
               ) : (
-                <Text style={styles.profileAvatarText}>{(authUser?.fullName || 'JS').split(' ').map((n: string) => n[0]).join('')}</Text>
+                <Text style={styles.profileAvatarText}>{(lecturerProfile?.fullName || 'JS').split(' ').map((n: string) => n[0]).join('')}</Text>
               )}
             </View>
             <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>Dr. Jane Smith</Text>
-              <Text style={styles.profileEmail}>jane.smith@university.edu</Text>
-              <Text style={styles.profileDepartment}>School of Computing</Text>
+              <Text style={styles.profileName}>{lecturerProfile?.fullName || 'Lecturer'}</Text>
+              <Text style={styles.profileEmail}>{lecturerProfile?.email || 'email@university.edu'}</Text>
+              <Text style={styles.profileDepartment}>{lecturerProfile?.studentId || 'Department'}</Text>
             </View>
           </View>
 
@@ -726,7 +762,7 @@ function LecturerDashboardScreen(props: LecturerDashboardScreenProps) {
           </View>
 
           <View style={styles.profileActions}>
-            <TouchableOpacity style={styles.profileButton} onPress={()=>{ setProfileFullName(authUser?.fullName||''); setProfileDepartment(authUser?.department||''); setShowEditProfile(true); }}>
+            <TouchableOpacity style={styles.profileButton} onPress={()=>{ setProfileFullName(lecturerProfile?.fullName||''); setProfileDepartment(lecturerProfile?.studentId||''); setShowEditProfile(true); }}>
               <Text style={styles.profileButtonText}>Edit Profile</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.profileButton} onPress={()=> setShowChangePassword(true)}>
@@ -879,7 +915,7 @@ function LecturerDashboardScreen(props: LecturerDashboardScreenProps) {
                   const reader = new FileReader();
                   reader.onload = async () => {
                     const dataUrl = String(reader.result || '');
-                    await authService.updateProfile({ avatarUrl: dataUrl, fullName: profileFullName, department: profileDepartment } as any);
+                    // Avatar update not implemented in API yet
                   };
                   reader.readAsDataURL(f);
                 }} />
@@ -891,9 +927,12 @@ function LecturerDashboardScreen(props: LecturerDashboardScreenProps) {
               </TouchableOpacity>
               <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={async ()=>{
                 try { setProfileSaving(true);
-                  const res = await authService.updateProfile({ fullName: profileFullName, department: profileDepartment } as any);
-                  if (!res.success) Alert.alert('Failed', res.message||'Could not update'); else Alert.alert('Updated', 'Profile saved');
+                  await api.lecturer.updateProfile(profileFullName, profileDepartment || null);
+                  Alert.alert('Updated', 'Profile saved');
                   setShowEditProfile(false);
+                  loadProfile(); // Refresh profile data
+                } catch (err: any) {
+                  Alert.alert('Failed', err.message || 'Could not update');
                 } finally { setProfileSaving(false); }
               }}>
                 <Text style={styles.saveButtonText}>{profileSaving? 'Saving...' : 'Save Changes'}</Text>
@@ -927,6 +966,11 @@ function LecturerDashboardScreen(props: LecturerDashboardScreenProps) {
           </View>
         </View>
       </Modal>
+
+      {/* Footer */}
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>© Ghislain Rugwiro. All rights reserved.</Text>
+      </View>
     </SafeAreaView>
   );
 }
@@ -1621,31 +1665,79 @@ const styles = StyleSheet.create({
   },
   notifCard: {
     backgroundColor: '#fff',
-    padding: 12,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#ecf0f1',
-    marginBottom: 10,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  notifHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  notifIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f8f9fa',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  notifIconText: {
+    fontSize: 18,
+  },
+  notifContent: {
+    flex: 1,
   },
   notifMessage: {
     color: '#2c3e50',
     fontSize: 14,
     fontWeight: '600',
+    lineHeight: 20,
+    marginBottom: 4,
   },
   notifMeta: {
     color: '#7f8c8d',
     fontSize: 12,
   },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#e74c3c',
+    marginTop: 4,
+  },
   notifMarkBtn: {
     backgroundColor: '#3498db',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
   },
   notifMarkBtnText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#2c3e50',
+    padding: 10,
+    alignItems: 'center',
+  },
+  footerText: {
+    color: '#ecf0f1',
+    fontSize: 12,
   },
 });
 

@@ -47,6 +47,11 @@ export default function LandingScreen({ navigation }: any) {
           <Text style={styles.getStartedText}>Get Started</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Footer */}
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>© Ghislain Rugwiro. All rights reserved.</Text>
+      </View>
     </ImageBackground>
   );
 }
@@ -176,5 +181,19 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 17,
     letterSpacing: 0.2,
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 10,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 3,
+  },
+  footerText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 12,
+    fontWeight: '400',
+    textAlign: 'center',
   },
 });

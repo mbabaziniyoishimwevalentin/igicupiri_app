@@ -87,33 +87,13 @@ export default function LoginScreen({ navigation }: any) {
     }
   };
 
-  const handleQuickLogin = (userType: 'admin' | 'lecturer' | 'student') => {
-    console.log('🚀 Quick login pressed for:', userType);
-    
-    const credentials = {
-      admin: { email: 'admin@igicupuri.edu', password: 'admin123' },
-      lecturer: { email: 'jane.smith@igicupuri.edu', password: 'lecturer123' },
-      student: { email: 'john.doe@student.igicupuri.edu', password: 'student123' }
-    };
 
-    const cred = credentials[userType];
-    console.log('📧 Setting credentials:', cred.email);
-    setEmail(cred.email);
-    setPassword(cred.password);
-    setErrors({});
-    
-    // Auto-login after setting credentials
-    setTimeout(() => {
-      console.log('⏰ Auto-login triggered');
-      onLogin();
-    }, 100);
-  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} bounces={false}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation?.goBack?.()}> 
+          <TouchableOpacity onPress={() => navigation?.goBack?.()}>
             {/* Back button area (icon could be added) */}
           </TouchableOpacity>
           <Text style={styles.headerTitle}>welcome{"\n"}Again</Text>
@@ -159,8 +139,8 @@ export default function LoginScreen({ navigation }: any) {
           </View>
 
           <View style={{ height: 8 }} />
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
             onPress={isLoading ? undefined : onLogin}
             disabled={isLoading}
@@ -178,41 +158,20 @@ export default function LoginScreen({ navigation }: any) {
             <View style={styles.hr} />
           </View>
 
-          <PrimaryButton 
-            title="Create Account" 
+          <PrimaryButton
+            title="Create Account"
             onPress={() => navigation?.navigate?.('Register')}
             disabled={isLoading}
           />
 
-          {/* Quick Login Demo Section */}
-          <View style={styles.demoSection}>
-            <Text style={styles.demoTitle}>Quick Login (Demo):</Text>
-            <View style={styles.quickLoginContainer}>
-              <TouchableOpacity 
-                style={styles.quickLoginButton}
-                onPress={() => handleQuickLogin('admin')}
-                disabled={isLoading}
-              >
-                <Text style={styles.quickLoginText}>Admin</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.quickLoginButton}
-                onPress={() => handleQuickLogin('lecturer')}
-                disabled={isLoading}
-              >
-                <Text style={styles.quickLoginText}>Lecturer</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.quickLoginButton}
-                onPress={() => handleQuickLogin('student')}
-                disabled={isLoading}
-              >
-                <Text style={styles.quickLoginText}>Student</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+
         </View>
       </ScrollView>
+
+      {/* Footer */}
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>© Ghislain Rugwiro. All rights reserved.</Text>
+      </View>
     </SafeAreaView>
   );
 }
@@ -284,37 +243,18 @@ const styles = StyleSheet.create({
     color: '#666',
     fontWeight: '600',
   },
-  demoSection: {
-    marginTop: 20,
-    padding: 16,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-  },
-  demoTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#495057',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  quickLoginContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    gap: 8,
-  },
-  quickLoginButton: {
-    flex: 1,
-    backgroundColor: '#6c757d',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#2c3e50',
+    padding: 10,
     alignItems: 'center',
   },
-  quickLoginText: {
-    color: '#fff',
+  footerText: {
+    color: '#ecf0f1',
     fontSize: 12,
-    fontWeight: '500',
   },
 });
